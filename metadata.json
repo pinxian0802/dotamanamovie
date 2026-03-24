@@ -1,0 +1,5 @@
+{
+  "name": "Remix: GEM Animation Workflow",
+  "description": "AI 動畫工作流整合平台，整合 Gemini, Midjourney 與 Nano Banana Pro，提供自動化的動畫前置作業流程。",
+  "requestFramePermissions": []
+}
