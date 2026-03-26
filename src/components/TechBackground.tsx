@@ -49,7 +49,11 @@ export default function TechBackground() {
       />
 
       {/* Moving Lines Background */}
-      <svg className="absolute inset-0 w-full h-full opacity-40">
+      <svg
+        className="absolute inset-0 w-full h-full opacity-40"
+        viewBox="0 0 1440 900"
+        preserveAspectRatio="none"
+      >
         <defs>
           <linearGradient id="lineGradPurple" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="rgba(168, 85, 247, 0)" />
@@ -69,40 +73,71 @@ export default function TechBackground() {
         </defs>
 
         {/* Straight Lines */}
-        <motion.line 
-          x1="-10%" y1="20%" x2="110%" y2="20%" 
-          stroke="url(#lineGradPurple)" strokeWidth="1"
-          animate={{ y1: ["20%", "30%", "20%"], y2: ["20%", "30%", "20%"] }}
+        <motion.g
+          animate={{ y: [0, 90, 0] }}
           transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-        />
-        <motion.line 
-          x1="-10%" y1="80%" x2="110%" y2="80%" 
-          stroke="url(#lineGradBlue)" strokeWidth="1"
-          animate={{ y1: ["80%", "70%", "80%"], y2: ["80%", "70%", "80%"] }}
+        >
+          <line
+            x1={-144}
+            y1={180}
+            x2={1584}
+            y2={180}
+            stroke="url(#lineGradPurple)"
+            strokeWidth="1"
+          />
+        </motion.g>
+        <motion.g
+          animate={{ y: [0, -90, 0] }}
           transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
-        />
+        >
+          <line
+            x1={-144}
+            y1={720}
+            x2={1584}
+            y2={720}
+            stroke="url(#lineGradBlue)"
+            strokeWidth="1"
+          />
+        </motion.g>
         
         {/* Diagonal Lines */}
-        <motion.line 
-          x1="0%" y1="-10%" x2="100%" y2="110%" 
-          stroke="url(#lineGradPink)" strokeWidth="1"
-          animate={{ x1: ["-10%", "10%", "-10%"], x2: ["90%", "110%", "90%"] }}
+        <motion.g
+          animate={{ x: [-120, 120, -120] }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-        />
+        >
+          <line
+            x1={0}
+            y1={-90}
+            x2={1440}
+            y2={990}
+            stroke="url(#lineGradPink)"
+            strokeWidth="1"
+          />
+        </motion.g>
         
         {/* Curved Lines */}
-        <motion.path 
-          d="M -100 300 Q 400 100 900 400 T 2000 300" 
-          fill="none" stroke="url(#lineGradBlue)" strokeWidth="1.5"
-          animate={{ d: ["M -100 300 Q 400 100 900 400 T 2000 300", "M -100 300 Q 400 600 900 400 T 2000 300", "M -100 300 Q 400 100 900 400 T 2000 300"] }}
+        <motion.g
+          animate={{ y: [0, 120, 0] }}
           transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.path 
-          d="M -100 700 Q 500 900 1000 600 T 2000 700" 
-          fill="none" stroke="url(#lineGradPurple)" strokeWidth="1"
-          animate={{ d: ["M -100 700 Q 500 900 1000 600 T 2000 700", "M -100 700 Q 500 400 1000 600 T 2000 700", "M -100 700 Q 500 900 1000 600 T 2000 700"] }}
+        >
+          <path
+            d="M -120 300 Q 380 100 900 400 T 1560 300"
+            fill="none"
+            stroke="url(#lineGradBlue)"
+            strokeWidth="1.5"
+          />
+        </motion.g>
+        <motion.g
+          animate={{ y: [0, -120, 0] }}
           transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
-        />
+        >
+          <path
+            d="M -120 700 Q 500 900 1000 600 T 1560 700"
+            fill="none"
+            stroke="url(#lineGradPurple)"
+            strokeWidth="1"
+          />
+        </motion.g>
       </svg>
     </div>
   );

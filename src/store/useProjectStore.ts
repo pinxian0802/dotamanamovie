@@ -34,6 +34,22 @@ export interface ScenePrompt {
 
 export interface PromoStoryboardScene {
   scene_number: number;
+  scene_outline?: string;
+  duration_seconds?: number;
+  default_shot_size?: string;
+  camera_setup?: string;
+  audio_design?: string;
+  subtitle_voiceover?: string;
+  continuity_summary?: string;
+  continuity_prompt?: {
+    en: string;
+    zh: string;
+  };
+  transition?: {
+    logic: string;
+    prompt_en: string;
+    prompt_zh: string;
+  };
   nano_banana_pro_prompts: {
     start_frame: string;
     start_frame_zh: string;
@@ -43,8 +59,21 @@ export interface PromoStoryboardScene {
 }
 
 export interface PromoScriptData {
+  creative_rationale?: string;
+  story_outline?: string;
+  total_duration_seconds?: number;
   script_dialogue: string;
   storyboard: PromoStoryboardScene[];
+}
+
+export interface GeminiUsageEntry {
+  id: string;
+  model: string;
+  timestamp: string;
+  calls: number;
+  promptTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: number;
 }
 
 interface ProjectState {
@@ -61,6 +90,8 @@ interface ProjectState {
   // Step 3
   characterImages: Record<string, string>; // name -> base64 image
   setCharacterImage: (name: string, image: string) => void;
+  characterDesignConfirmed: Record<string, boolean>;
+  setCharacterDesignConfirmed: (name: string, confirmed: boolean) => void;
 
   // Step 4
   characterConceptSheets: Record<string, string>; // name -> base64 image
@@ -92,10 +123,16 @@ interface ProjectState {
   promoScriptData: PromoScriptData | null;
   setPromoScriptData: (data: PromoScriptData | null) => void;
   updatePromoScenePrompts: (sceneNumber: number, prompts: Partial<PromoStoryboardScene['nano_banana_pro_prompts']>) => void;
+  promoImageConfirmed: Record<string, boolean>;
+  setPromoImageConfirmed: (key: string, confirmed: boolean) => void;
   promoImages: Record<string, { start: string; end: string }>; // scene_number -> {start, end} base64
   setPromoImage: (sceneNumber: number, type: 'start' | 'end', image: string) => void;
+  promoVideoConfirmed: Record<string, boolean>;
+  setPromoVideoConfirmed: (sceneNumber: number, confirmed: boolean) => void;
   promoVideos: Record<string, string>; // scene_number -> video url
   setPromoVideo: (sceneNumber: number, videoUrl: string) => void;
+  promoTransitionConfirmed: Record<string, boolean>;
+  setPromoTransitionConfirmed: (transitionIndex: number, confirmed: boolean) => void;
   promoTransitions: Record<string, string>; // scene_number -> transition video url
   setPromoTransition: (sceneNumber: number, videoUrl: string) => void;
 
@@ -109,6 +146,9 @@ interface ProjectState {
   completedSteps: number[];
   markStepCompleted: (step: number) => void;
   resetProject: () => void;
+  apiKey: string;
+  setApiKey: (apiKey: string) => void;
+  clearApiKey: () => void;
   name: string;
   setName: (name: string) => void;
   description: string;
@@ -125,6 +165,7 @@ interface ProjectState {
   apiUsage: Record<string, number>;
   incrementApiUsage: (model: string) => void;
   geminiUsage: Record<string, { calls: number; promptTokens: number; outputTokens: number; estimatedCostUsd: number }>;
+  usageHistory: GeminiUsageEntry[];
   recordGeminiUsage: (model: string, usage: { calls?: number; promptTokens?: number; outputTokens?: number; estimatedCostUsd?: number }) => void;
 }
 
@@ -142,6 +183,14 @@ export const useProjectStore = create<ProjectState>()(
   characterImages: {},
   setCharacterImage: (name, image) => 
     set((state) => ({ characterImages: { ...state.characterImages, [name]: image } })),
+  characterDesignConfirmed: {},
+  setCharacterDesignConfirmed: (name, confirmed) =>
+    set((state) => ({
+      characterDesignConfirmed: {
+        ...state.characterDesignConfirmed,
+        [name]: confirmed,
+      },
+    })),
 
   characterConceptSheets: {},
   setCharacterConceptSheet: (name, image) => 
@@ -191,6 +240,14 @@ export const useProjectStore = create<ProjectState>()(
       }
     };
   }),
+  promoImageConfirmed: {},
+  setPromoImageConfirmed: (key, confirmed) =>
+    set((state) => ({
+      promoImageConfirmed: {
+        ...state.promoImageConfirmed,
+        [key]: confirmed,
+      },
+    })),
   promoImages: {},
   setPromoImage: (sceneNumber, type, image) => 
     set((state) => ({ 
@@ -202,9 +259,25 @@ export const useProjectStore = create<ProjectState>()(
         } 
       } 
     })),
+  promoVideoConfirmed: {},
+  setPromoVideoConfirmed: (sceneNumber, confirmed) =>
+    set((state) => ({
+      promoVideoConfirmed: {
+        ...state.promoVideoConfirmed,
+        [sceneNumber]: confirmed,
+      },
+    })),
   promoVideos: {},
   setPromoVideo: (sceneNumber, videoUrl) => 
     set((state) => ({ promoVideos: { ...state.promoVideos, [sceneNumber]: videoUrl } })),
+  promoTransitionConfirmed: {},
+  setPromoTransitionConfirmed: (transitionIndex, confirmed) =>
+    set((state) => ({
+      promoTransitionConfirmed: {
+        ...state.promoTransitionConfirmed,
+        [transitionIndex]: confirmed,
+      },
+    })),
   promoTransitions: {},
   setPromoTransition: (sceneNumber, videoUrl) => 
     set((state) => ({ promoTransitions: { ...state.promoTransitions, [sceneNumber]: videoUrl } })),
@@ -223,6 +296,10 @@ export const useProjectStore = create<ProjectState>()(
       ? state.completedSteps 
       : [...state.completedSteps, step] 
   })),
+
+  apiKey: '',
+  setApiKey: (apiKey) => set({ apiKey: apiKey.trim() }),
+  clearApiKey: () => set({ apiKey: '' }),
   
   name: '',
   setName: (name) => set({ name }),
@@ -232,7 +309,7 @@ export const useProjectStore = create<ProjectState>()(
   projectHistory: [],
   addProjectToHistory: () => {
     const state = get();
-    const { projectHistory, currentProjectId, ...stateToSave } = state;
+    const { projectHistory, currentProjectId, apiKey, setApiKey, clearApiKey, ...stateToSave } = state;
     const newId = Date.now().toString();
     
     set((s) => ({ 
@@ -251,7 +328,7 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (!state.currentProjectId) return;
     
-    const { projectHistory, currentProjectId, ...stateToSave } = state;
+    const { projectHistory, currentProjectId, apiKey, setApiKey, clearApiKey, ...stateToSave } = state;
     
     const currentProject = state.projectHistory.find(p => p.id === currentProjectId);
     if (!currentProject) return;
@@ -282,20 +359,38 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     const project = state.projectHistory.find(p => p.id === id);
     if (project) {
-      // Restore state but keep the current projectHistory and apiUsage
+      const projectState = project.state || {};
+      // Restore state but keep the cross-project history and usage analytics.
       set({ 
-        ...project.state, 
+        ...projectState, 
         currentProjectId: id,
         projectHistory: state.projectHistory,
-        apiUsage: state.apiUsage
+        apiUsage: state.apiUsage,
+        geminiUsage: state.geminiUsage,
+        usageHistory: state.usageHistory,
+        apiKey: state.apiKey,
+        characterDesignConfirmed: projectState.characterDesignConfirmed || {},
+        promoImageConfirmed: projectState.promoImageConfirmed || {},
+        promoVideoConfirmed: projectState.promoVideoConfirmed || {},
+        promoTransitionConfirmed: projectState.promoTransitionConfirmed || {},
       });
     }
   },
   apiUsage: {},
   incrementApiUsage: (model) => set((state) => ({ apiUsage: { ...state.apiUsage, [model]: (state.apiUsage[model] || 0) + 1 } })),
   geminiUsage: {},
+  usageHistory: [],
   recordGeminiUsage: (model, usage) => set((state) => {
     const prev = state.geminiUsage[model] || { calls: 0, promptTokens: 0, outputTokens: 0, estimatedCostUsd: 0 };
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      model,
+      timestamp: new Date().toISOString(),
+      calls: usage.calls || 0,
+      promptTokens: usage.promptTokens || 0,
+      outputTokens: usage.outputTokens || 0,
+      estimatedCostUsd: usage.estimatedCostUsd || 0,
+    };
     return {
       geminiUsage: {
         ...state.geminiUsage,
@@ -310,6 +405,7 @@ export const useProjectStore = create<ProjectState>()(
         ...state.apiUsage,
         [model]: (state.apiUsage[model] || 0) + (usage.calls || 0),
       },
+      usageHistory: [...state.usageHistory, entry],
     };
   }),
   
@@ -319,6 +415,7 @@ export const useProjectStore = create<ProjectState>()(
     storyData: '',
     characterPrompts: [],
     characterImages: {},
+    characterDesignConfirmed: {},
     characterConceptSheets: {},
     scenePrompts: [],
     sceneImages: {},
@@ -326,8 +423,11 @@ export const useProjectStore = create<ProjectState>()(
     videoScenes: {},
     voiceScenes: {},
     promoScriptData: null,
+    promoImageConfirmed: {},
     promoImages: {},
+    promoVideoConfirmed: {},
     promoVideos: {},
+    promoTransitionConfirmed: {},
     promoTransitions: {},
     finalVideo: null,
     workflowType: null,
@@ -335,7 +435,6 @@ export const useProjectStore = create<ProjectState>()(
     completedSteps: [],
     name: '',
     description: '',
-    geminiUsage: {},
   }),
 }), { 
   name: 'project-storage',

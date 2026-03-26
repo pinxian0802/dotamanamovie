@@ -8,12 +8,21 @@ import { downloadAsset } from '../../utils/download';
 
 export default function PromoVideoStep4() {
   const navigate = useNavigate();
-  const { promoScriptData, promoImages, promoVideos, setPromoVideo, markStepCompleted, setCurrentStep, updatePromoScenePrompts } = useProjectStore();
+  const {
+    promoScriptData,
+    promoImages,
+    promoVideos,
+    promoVideoConfirmed,
+    setPromoVideo,
+    setPromoVideoConfirmed,
+    markStepCompleted,
+    setCurrentStep,
+    updatePromoScenePrompts,
+  } = useProjectStore();
   
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
   const [progress, setProgress] = useState<Record<string, number>>({});
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const generateVideo = async (sceneNumber: number, videoPrompt: string) => {
@@ -32,7 +41,6 @@ export default function PromoVideoStep4() {
       });
 
       setPromoVideo(sceneNumber, videoUrl);
-      setConfirmed(prev => ({ ...prev, [sceneNumber]: false }));
     } catch (error: any) {
       console.error(`Failed to generate video for scene ${sceneNumber}:`, error);
       const errorString = error?.message || JSON.stringify(error) || '';
@@ -63,8 +71,6 @@ export default function PromoVideoStep4() {
       const data = await adjustPromoPrompt(userInput, currentPrompts);
       
       updatePromoScenePrompts(sceneNumber, data);
-      // Unconfirm so user can regenerate
-      setConfirmed(prev => ({ ...prev, [sceneNumber]: false }));
     } catch (error: any) {
       console.error('Adjust prompt error:', error);
       setErrorMsg('調整提示詞失敗，請稍後再試。');
@@ -74,7 +80,7 @@ export default function PromoVideoStep4() {
   };
 
   const toggleConfirm = (sceneNumber: number) => {
-    setConfirmed(prev => ({ ...prev, [sceneNumber]: !prev[sceneNumber] }));
+    setPromoVideoConfirmed(sceneNumber, !promoVideoConfirmed[sceneNumber]);
   };
 
   const handleNext = () => {
@@ -87,7 +93,7 @@ export default function PromoVideoStep4() {
     navigate('/step3a');
   };
 
-  const allConfirmed = promoScriptData?.storyboard.every(scene => confirmed[scene.scene_number]);
+  const allConfirmed = promoScriptData?.storyboard.every(scene => promoVideoConfirmed[scene.scene_number]);
 
   if (!promoScriptData) {
     return (
@@ -155,8 +161,13 @@ export default function PromoVideoStep4() {
                   <Download className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => generateVideo(scene.scene_number, scene.nano_banana_pro_prompts.start_frame)}
-                  disabled={generating[scene.scene_number] || confirmed[scene.scene_number]}
+                  onClick={() =>
+                    generateVideo(
+                      scene.scene_number,
+                      scene.continuity_prompt?.en || scene.nano_banana_pro_prompts.start_frame,
+                    )
+                  }
+                  disabled={generating[scene.scene_number] || promoVideoConfirmed[scene.scene_number]}
                   className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 rounded-md text-neutral-300 transition-colors flex items-center gap-2 text-sm"
                 >
                   <RefreshCw className={clsx("w-4 h-4", generating[scene.scene_number] && "animate-spin")} />
@@ -167,7 +178,7 @@ export default function PromoVideoStep4() {
                   disabled={!promoVideos[scene.scene_number]}
                   className={clsx(
                     "px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 text-sm font-medium",
-                    confirmed[scene.scene_number] 
+                    promoVideoConfirmed[scene.scene_number] 
                       ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
                       : "bg-neutral-800 hover:bg-neutral-700 text-neutral-400 disabled:opacity-50"
                   )}
@@ -194,10 +205,10 @@ export default function PromoVideoStep4() {
                 <div className="w-full space-y-2">
                   <div className="text-xs text-neutral-500 font-mono text-center">影片生成提示詞</div>
                   <div className="w-full bg-indigo-950/30 border border-indigo-900/50 rounded-lg px-3 py-2 text-indigo-200 text-sm h-24 overflow-y-auto text-center space-y-2">
-                    <p className="font-mono">{scene.nano_banana_pro_prompts.start_frame}</p>
-                    {scene.nano_banana_pro_prompts.start_frame_zh && (
+                    <p className="font-mono">{scene.continuity_prompt?.en || scene.nano_banana_pro_prompts.start_frame}</p>
+                    {(scene.continuity_prompt?.zh || scene.nano_banana_pro_prompts.start_frame_zh) && (
                       <p className="text-xs text-indigo-400/80 font-sans border-t border-indigo-900/50 pt-2">
-                        {scene.nano_banana_pro_prompts.start_frame_zh}
+                        {scene.continuity_prompt?.zh || scene.nano_banana_pro_prompts.start_frame_zh}
                       </p>
                     )}
                   </div>

@@ -1,5 +1,14 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { useProjectStore } from '../store/useProjectStore';
+import {
+  STORY_CHAT_SYSTEM_PROMPT,
+  buildCharacterPromptRequest,
+  buildScenePromptRequest,
+  buildPromoScriptPrompt,
+  PROMO_SCRIPT_SYSTEM_PROMPT,
+  PROMO_SCRIPT_ADJUST_SYSTEM_PROMPT,
+  PROMO_PROMPT_ADJUST_SYSTEM_PROMPT,
+} from '../config/promptTemplates';
 
 const TEXT_MODEL = 'gemini-3-flash-preview';
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
@@ -32,10 +41,29 @@ export interface PromoScenePrompts {
 
 export interface PromoStoryboardScene {
   scene_number: number;
+  scene_outline?: string;
+  duration_seconds?: number;
+  default_shot_size?: string;
+  camera_setup?: string;
+  audio_design?: string;
+  subtitle_voiceover?: string;
+  continuity_summary?: string;
+  continuity_prompt?: {
+    en: string;
+    zh: string;
+  };
+  transition?: {
+    logic: string;
+    prompt_en: string;
+    prompt_zh: string;
+  };
   nano_banana_pro_prompts: PromoScenePrompts;
 }
 
 export interface PromoScriptData {
+  creative_rationale?: string;
+  story_outline?: string;
+  total_duration_seconds?: number;
   script_dialogue: string;
   storyboard: PromoStoryboardScene[];
 }
@@ -65,7 +93,7 @@ type PromptMessage = { role: 'user' | 'model'; text: string; images?: string[] }
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const getApiKey = () => process.env.API_KEY || process.env.GEMINI_API_KEY;
+const getApiKey = () => useProjectStore.getState().apiKey;
 
 const PRICE_TABLE = {
   textInputPer1M: 0.5,
@@ -96,6 +124,15 @@ const recordUsage = (model: string, usage: UsageRecord) => {
   }
 };
 
+const isUnsupportedCountTokensError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : JSON.stringify(error) || '';
+  return message.includes('countTokens') && (
+    message.includes('not supported for countTokens') ||
+    message.includes('"status":"NOT_FOUND"') ||
+    message.includes('NOT_FOUND')
+  );
+};
+
 const estimateTextCost = (promptTokens: number, outputTokens: number) => {
   return (promptTokens / 1_000_000) * PRICE_TABLE.textInputPer1M + (outputTokens / 1_000_000) * PRICE_TABLE.textOutputPer1M;
 };
@@ -111,7 +148,7 @@ const estimateVideoCost = (promptTokens: number, videoCount = 1) => {
 export const getAi = () => {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error('API_KEY or GEMINI_API_KEY environment variable is required');
+    throw new Error('API key is required. Please enter it in the API Key page.');
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -163,6 +200,101 @@ const buildParts = (prompt: string, referenceFiles: GeminiReferenceFile[] = []) 
 
   return parts;
 };
+
+const promoPromptSchema = {
+  type: Type.OBJECT,
+  properties: {
+    start_frame: { type: Type.STRING, description: '首幀英文提示詞' },
+    start_frame_zh: { type: Type.STRING, description: '首幀中文翻譯' },
+    end_frame: { type: Type.STRING, description: '尾幀英文提示詞' },
+    end_frame_zh: { type: Type.STRING, description: '尾幀中文翻譯' },
+  },
+  required: ['start_frame', 'start_frame_zh', 'end_frame', 'end_frame_zh'],
+} as const;
+
+const buildPromoStoryboardSceneSchema = (aspectRatio: string) => ({
+  type: Type.OBJECT,
+  properties: {
+    scene_number: { type: Type.INTEGER },
+    scene_outline: { type: Type.STRING },
+    duration_seconds: { type: Type.INTEGER },
+    default_shot_size: {
+      type: Type.STRING,
+      description: '預設景別，只能是 medium close-up、close-up、extreme close-up、macro shot 其中之一',
+    },
+    camera_setup: { type: Type.STRING },
+    audio_design: { type: Type.STRING },
+    subtitle_voiceover: {
+      type: Type.STRING,
+      description: '字幕或旁白，每一句之間必須空一行',
+    },
+    nano_banana_pro_prompts: {
+      type: Type.OBJECT,
+      properties: {
+        start_frame: {
+          type: Type.STRING,
+          description: `首幀英文提示詞，需包含場景、光線、風格、鏡頭，並適用於 ${aspectRatio}`,
+        },
+        start_frame_zh: { type: Type.STRING },
+        end_frame: {
+          type: Type.STRING,
+          description: `尾幀英文提示詞，需延續首幀場景語法，並適用於 ${aspectRatio}`,
+        },
+        end_frame_zh: { type: Type.STRING },
+      },
+      required: ['start_frame', 'start_frame_zh', 'end_frame', 'end_frame_zh'],
+    },
+    continuity_summary: { type: Type.STRING },
+    continuity_prompt: {
+      type: Type.OBJECT,
+      properties: {
+        en: { type: Type.STRING },
+        zh: { type: Type.STRING },
+      },
+      required: ['en', 'zh'],
+    },
+    transition: {
+      type: Type.OBJECT,
+      properties: {
+        logic: { type: Type.STRING },
+        prompt_en: { type: Type.STRING },
+        prompt_zh: { type: Type.STRING },
+      },
+      required: ['logic', 'prompt_en', 'prompt_zh'],
+    },
+  },
+  required: [
+    'scene_number',
+    'scene_outline',
+    'duration_seconds',
+    'default_shot_size',
+    'camera_setup',
+    'audio_design',
+    'subtitle_voiceover',
+    'nano_banana_pro_prompts',
+    'continuity_summary',
+    'continuity_prompt',
+    'transition',
+  ],
+});
+
+const buildPromoScriptSchema = (aspectRatio: string) => ({
+  type: Type.OBJECT,
+  properties: {
+    creative_rationale: { type: Type.STRING },
+    story_outline: { type: Type.STRING },
+    total_duration_seconds: { type: Type.INTEGER },
+    script_dialogue: {
+      type: Type.STRING,
+      description: '全片字幕 / 旁白內容，每一句之間必須空一行',
+    },
+    storyboard: {
+      type: Type.ARRAY,
+      items: buildPromoStoryboardSceneSchema(aspectRatio),
+    },
+  },
+  required: ['creative_rationale', 'story_outline', 'script_dialogue', 'storyboard'],
+});
 
 const extractDataUrl = (value: string) => {
   const matches = value.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -253,12 +385,7 @@ export const generateChatResponse = async (
 };
 
 export const generateCharacterPrompts = async (storyData: string) => {
-  const prompt = `
-你是一位專業的角色設計師，請根據我提供給你的【故事情節】設計每個主要角色的外觀，包含相貌、髮型、服裝、體型、氣質等，並轉換為 AI 影像生成工具的英文提示詞 (附上中文翻譯)，所有角色皆以白色的背景單獨呈現。
-
-故事情節：
-${storyData}
-`;
+  const prompt = buildCharacterPromptRequest(storyData);
 
   const response = await generateTextWithUsage({
     contents: prompt,
@@ -283,14 +410,7 @@ ${storyData}
 };
 
 export const generateScenePrompts = async (storyboardData: string) => {
-  const prompt = `
-請將以下「分鏡規劃」中的「地點」與「鏡頭」描述改寫成一則 Midjourney 英文提示詞 (附上中文翻譯)。
-移除掉分鏡中提到的人名，改為人物類型描述（例：年輕女孩、少年、成熟女性）。
-移除分鏡中關於鏡頭移動的指示 (例：鏡頭向前推進)，只描述靜態的畫面與構圖。
-
-分鏡規劃：
-${storyboardData}
-`;
+  const prompt = buildScenePromptRequest(storyboardData);
 
   const response = await generateTextWithUsage({
     contents: prompt,
@@ -319,6 +439,7 @@ export const generatePromoScriptData = async ({
   productFeatures,
   productContents,
   productOrigin,
+  totalDurationSeconds,
   aspectRatio,
   includeCharacters,
   supplementaryText,
@@ -328,62 +449,30 @@ export const generatePromoScriptData = async ({
   productFeatures: string;
   productContents: string;
   productOrigin: string;
+  totalDurationSeconds: string;
   aspectRatio: string;
   includeCharacters: boolean;
   supplementaryText: string;
   referenceFiles?: GeminiReferenceFile[];
 }): Promise<PromoScriptData> => {
-  const prompt = `
-Product Name: ${productName}
-Features: ${productFeatures}
-Contents: ${productContents}
-Origin: ${productOrigin}
-Video Aspect Ratio: ${aspectRatio}
-Include Characters: ${includeCharacters ? 'Yes (Please include human characters in the storyboard)' : 'No (Please DO NOT include any human characters, focus only on the product and environment)'}
-Supplementary Info (Style/Elements): ${supplementaryText || 'None'}
-
-Please generate a short video script and storyboard based on this product information.
-`;
+  const prompt = buildPromoScriptPrompt({
+    productName,
+    productFeatures,
+    productContents,
+    productOrigin,
+    totalDurationSeconds,
+    aspectRatio,
+    includeCharacters,
+    supplementaryText,
+  });
 
   const response = await generateTextWithUsage({
     contents: { parts: buildParts(prompt, referenceFiles) },
     config: {
-      systemInstruction: `你是一位頂尖的商業短影音企劃與廣告導演。請根據使用者提供的產品資訊，制定吸睛的短影音腳本與分鏡，並拆解出所有影片 API 所需的精準參數。
-【排版絕對要求 - 系統防呆機制】：在撰寫旁白、對話或字幕時，每一句對話段落之間，都必須強制空一行。 此為語音切割系統的硬性規定，絕對不可省略。
-【人物出鏡指示】：如果使用者選擇需要人物出鏡，請在提示詞中加入人物描述；若選擇不需要，請確保畫面中只有產品與環境，絕對不要出現人物。
-【動態與轉場指示】：請將畫面的動態描述、物理變化以及與前後鏡頭的轉場方式，直接結合並寫入首幀與尾幀的提示詞中。`,
+      systemInstruction: PROMO_SCRIPT_SYSTEM_PROMPT,
       temperature: 0.7,
       responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          script_dialogue: {
-            type: Type.STRING,
-            description: '旁白或對話，每一句之間必須強制空一行。',
-          },
-          storyboard: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                scene_number: { type: Type.INTEGER },
-                nano_banana_pro_prompts: {
-                  type: Type.OBJECT,
-                  properties: {
-                    start_frame: { type: Type.STRING, description: `首幀英文提示詞 (需包含產品外觀與環境、動態描述與物理變化、以及與上一鏡的轉場方式, --ar ${aspectRatio})` },
-                    start_frame_zh: { type: Type.STRING, description: '首幀提示詞的中文翻譯' },
-                    end_frame: { type: Type.STRING, description: `尾幀英文提示詞 (畫面演變後的結果、動態描述與物理變化、以及與下一鏡的轉場方式, --ar ${aspectRatio})` },
-                    end_frame_zh: { type: Type.STRING, description: '尾幀提示詞的中文翻譯' },
-                  },
-                  required: ['start_frame', 'start_frame_zh', 'end_frame', 'end_frame_zh'],
-                },
-              },
-              required: ['scene_number', 'nano_banana_pro_prompts'],
-            },
-          },
-        },
-        required: ['script_dialogue', 'storyboard'],
-      },
+      responseSchema: buildPromoScriptSchema(aspectRatio),
     },
   });
 
@@ -405,34 +494,8 @@ Please update the script and storyboard based on the user request. Return the up
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
-      systemInstruction: '你是一位專業的廣告導演，請根據使用者的回饋調整腳本與分鏡架構，並返回相同的 JSON 格式。',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          script_dialogue: { type: Type.STRING },
-          storyboard: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                scene_number: { type: Type.INTEGER },
-                nano_banana_pro_prompts: {
-                  type: Type.OBJECT,
-                  properties: {
-                    start_frame: { type: Type.STRING },
-                    start_frame_zh: { type: Type.STRING },
-                    end_frame: { type: Type.STRING },
-                    end_frame_zh: { type: Type.STRING },
-                  },
-                  required: ['start_frame', 'start_frame_zh', 'end_frame', 'end_frame_zh'],
-                },
-              },
-              required: ['scene_number', 'nano_banana_pro_prompts'],
-            },
-          },
-        },
-        required: ['script_dialogue', 'storyboard'],
-      },
+      systemInstruction: PROMO_SCRIPT_ADJUST_SYSTEM_PROMPT,
+      responseSchema: buildPromoScriptSchema('9:16'),
     },
   });
 
@@ -456,20 +519,41 @@ ${JSON.stringify(currentPrompts, null, 2)}
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          start_frame: { type: Type.STRING, description: '修改後的首幀英文提示詞' },
-          start_frame_zh: { type: Type.STRING, description: '修改後的首幀中文翻譯' },
-          end_frame: { type: Type.STRING, description: '修改後的尾幀英文提示詞' },
-          end_frame_zh: { type: Type.STRING, description: '修改後的尾幀中文翻譯' },
-        },
-        required: ['start_frame', 'start_frame_zh', 'end_frame', 'end_frame_zh'],
-      },
+      systemInstruction: PROMO_PROMPT_ADJUST_SYSTEM_PROMPT,
+      responseSchema: promoPromptSchema,
     },
   });
 
   return parseJsonResponse<PromoScenePrompts>(response.text || '{}', 'adjustPromoPrompt');
+};
+
+export const adjustPromoPromptWithReferences = async (
+  userInput: string,
+  currentPrompts: PromoScenePrompts,
+  referenceFiles: GeminiReferenceFile[] = [],
+) => {
+  const prompt = `
+You are adjusting PROMO start and end frame prompts for a product ad workflow.
+Return JSON only and preserve the existing response structure.
+If reference images are attached, use them as visual guidance for product appearance, character face, pose, styling, composition, and scene context.
+
+User request:
+${userInput}
+
+Current prompts:
+${JSON.stringify(currentPrompts, null, 2)}
+`;
+
+  const response = await generateTextWithUsage({
+    contents: { parts: buildParts(prompt, referenceFiles) },
+    config: {
+      responseMimeType: 'application/json',
+      systemInstruction: PROMO_PROMPT_ADJUST_SYSTEM_PROMPT,
+      responseSchema: promoPromptSchema,
+    },
+  });
+
+  return parseJsonResponse<PromoScenePrompts>(response.text || '{}', 'adjustPromoPromptWithReferences');
 };
 
 export const generateMusicPrompts = async ({
@@ -655,11 +739,26 @@ export const generatePromoVideo = async ({
     throw new Error('Missing start or end frame images');
   }
 
-  const promptTokens = await countTokens([
-    { text: prompt },
-    { inlineData: { mimeType: startFrame.mimeType, data: startFrame.data } },
-    { inlineData: { mimeType: endFrame.mimeType, data: endFrame.data } },
-  ], VIDEO_MODEL);
+  let promptTokens = 0;
+  try {
+    promptTokens = await countTokens([
+      { text: prompt },
+      { inlineData: { mimeType: startFrame.mimeType, data: startFrame.data } },
+      { inlineData: { mimeType: endFrame.mimeType, data: endFrame.data } },
+    ], VIDEO_MODEL);
+  } catch (error) {
+    if (!isUnsupportedCountTokensError(error)) {
+      throw error;
+    }
+
+    // Veo preview models may support video generation without supporting countTokens.
+    // Fall back to counting the text prompt only so usage tracking doesn't block generation.
+    try {
+      promptTokens = await countTokens(prompt, TEXT_MODEL);
+    } catch {
+      promptTokens = 0;
+    }
+  }
 
   onProgress?.(10);
 
@@ -691,7 +790,10 @@ export const generatePromoVideo = async ({
 
   onProgress?.(95);
 
-  const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+  const operationResponse = operation.response as any;
+  const downloadLink =
+    operationResponse?.generatedVideos?.[0]?.video?.uri ||
+    operationResponse?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
   if (!downloadLink) {
     throw new Error('No video URI returned');
   }

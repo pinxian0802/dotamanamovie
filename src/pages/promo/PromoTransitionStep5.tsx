@@ -8,10 +8,19 @@ import { downloadAsset } from '../../utils/download';
 
 export default function PromoTransitionStep5() {
   const navigate = useNavigate();
-  const { promoScriptData, promoImages, promoVideos, promoTransitions, setPromoTransition, markStepCompleted, setCurrentStep } = useProjectStore();
+  const {
+    promoScriptData,
+    promoImages,
+    promoVideos,
+    promoTransitions,
+    promoTransitionConfirmed,
+    setPromoTransition,
+    setPromoTransitionConfirmed,
+    markStepCompleted,
+    setCurrentStep,
+  } = useProjectStore();
   
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const generateTransition = async (transitionIndex: number, transitionPrompt: string) => {
@@ -30,7 +39,6 @@ export default function PromoTransitionStep5() {
       });
 
       setPromoTransition(transitionIndex, videoUrl);
-      setConfirmed(prev => ({ ...prev, [transitionIndex]: false }));
     } catch (error: any) {
       console.error(`Failed to generate transition ${transitionIndex}:`, error);
       const errorString = error?.message || JSON.stringify(error) || '';
@@ -47,7 +55,7 @@ export default function PromoTransitionStep5() {
   };
 
   const toggleConfirm = (transitionIndex: number) => {
-    setConfirmed(prev => ({ ...prev, [transitionIndex]: !prev[transitionIndex] }));
+    setPromoTransitionConfirmed(transitionIndex, !promoTransitionConfirmed[transitionIndex]);
   };
 
   const handleNext = () => {
@@ -72,7 +80,7 @@ export default function PromoTransitionStep5() {
   const numTransitions = promoScriptData.storyboard.length - 1;
   
   // If there's only 1 scene, no transitions needed
-  const allConfirmed = numTransitions === 0 || Array.from({ length: numTransitions }).every((_, i) => confirmed[i]);
+  const allConfirmed = numTransitions === 0 || Array.from({ length: numTransitions }).every((_, i) => promoTransitionConfirmed[i]);
 
   return (
     <div className="flex flex-col h-full bg-transparent relative z-10 overflow-hidden">
@@ -147,7 +155,7 @@ export default function PromoTransitionStep5() {
                         </button>
                         <button
                           onClick={() => generateTransition(idx, transitionPrompt)}
-                          disabled={generating[idx] || confirmed[idx]}
+                          disabled={generating[idx] || promoTransitionConfirmed[idx]}
                           className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 rounded-md text-neutral-300 transition-colors flex items-center gap-2 text-sm"
                         >
                           <RefreshCw className={clsx("w-4 h-4", generating[idx] && "animate-spin")} />
@@ -158,7 +166,7 @@ export default function PromoTransitionStep5() {
                           disabled={!promoTransitions[idx]}
                           className={clsx(
                             "px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 text-sm font-medium",
-                            confirmed[idx] 
+                            promoTransitionConfirmed[idx] 
                               ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
                               : "bg-neutral-800 hover:bg-neutral-700 text-neutral-400 disabled:opacity-50"
                           )}

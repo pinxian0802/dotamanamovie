@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateChatResponse } from '../../services/geminiService';
+import { STORY_CHAT_SYSTEM_PROMPT } from '../../config/promptTemplates';
 
 export default function StoryStep1() {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ export default function StoryStep1() {
       setStoryChatHistory([
         {
           role: 'model',
-          text: '你好！我是你的專業編劇助理。我們將依照以下順序進行討論：\n1. 故事大綱\n2. 劇本腳本\n3. 分鏡規劃\n\n請告訴我你想要製作什麼樣的故事？',
+          text: '我們先一起把 GEM 故事動畫流的前期內容定下來。我會陪你依序完成：\n\n1. 故事大綱\n\n2. 劇本內容\n\n3. 分鏡規劃\n\n你可以直接告訴我故事概念、角色設定、情緒風格或參考作品。',
         },
       ]);
     }
@@ -75,7 +76,7 @@ export default function StoryStep1() {
       const responseText = await generateChatResponse(
         newHistory,
         userMessage,
-        '你是一位專業編劇。請主動引導使用者，嚴格依照以下順序進行討論：1. 故事大綱 -> 2. 劇本腳本 -> 3. 分鏡規劃。確保每個階段都與使用者確認後再進入下一階段。回答時請務必段落分明，每個主題、段落或「不同的選項」之間請至少空一行，以便於閱讀。請使用 Markdown 格式，適當使用標題（#、##）、條列式（-）與粗體（**）來組織內容，讓排版清晰易讀。',
+        STORY_CHAT_SYSTEM_PROMPT,
         model
       );
 
@@ -175,7 +176,7 @@ export default function StoryStep1() {
             onChange={(e) => setModel(e.target.value)}
             className="bg-neutral-900/80 border border-neutral-700/50 text-indigo-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
           >
-            <option value="Gemini">Gemini 3.1 Pro</option>
+            <option value="Gemini">Gemini Story Planner</option>
             <option value="GPT">GPT-5 (Mock)</option>
           </select>
           <button

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Layout from './components/Layout';
 import Lobby from './pages/common/Lobby';
@@ -21,69 +21,21 @@ import PromoVideoStep4 from './pages/promo/PromoVideoStep4';
 import PromoTransitionStep5 from './pages/promo/PromoTransitionStep5';
 import AdminDashboard from './pages/common/AdminDashboard';
 import ProjectArchive from './pages/common/ProjectArchive';
-
-// Declare global window property for aistudio
-declare global {
-  interface Window {
-    aistudio?: {
-      hasSelectedApiKey: () => Promise<boolean>;
-      openSelectKey: () => Promise<void>;
-    };
-  }
-}
+import ApiKeyPage from './pages/common/ApiKeyPage';
 
 export default function App() {
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasKey(selected);
-      } else {
-        // If aistudio is not available, assume we can proceed (e.g. local dev)
-        setHasKey(true);
-      }
+    const hydrate = async () => {
+      setHasHydrated(true);
     };
-    checkKey();
+
+    hydrate();
   }, []);
 
-  const handleSelectKey = async () => {
-    if (window.aistudio?.openSelectKey) {
-      await window.aistudio.openSelectKey();
-      // Assume success after triggering to avoid race conditions
-      setHasKey(true);
-    }
-  };
-
-  if (hasKey === null) {
+  if (!hasHydrated) {
     return <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-white">Loading...</div>;
-  }
-
-  if (!hasKey) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white p-6">
-        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center space-y-6">
-          <h1 className="text-2xl font-bold tracking-tight">API Key Required</h1>
-          <p className="text-zinc-400">
-            This application requires a paid Gemini API key to generate high-quality images. 
-            Please select your API key to continue.
-          </p>
-          <button 
-            onClick={handleSelectKey}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-4 rounded-xl transition-colors"
-          >
-            Select API Key
-          </button>
-          <p className="text-xs text-zinc-500 mt-4">
-            You must select an API key from a paid Google Cloud project. <br/>
-            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">
-              Learn more about billing
-            </a>
-          </p>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -91,6 +43,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Lobby />} />
+          <Route path="api-key" element={<ApiKeyPage />} />
+          <Route path="admin" element={<AdminDashboard />} />
+          <Route path="archive" element={<ProjectArchive />} />
           <Route path="step1" element={<StoryStep1 />} />
           <Route path="step2" element={<CharacterConceptStep2 />} />
           <Route path="step3" element={<CharacterDesignStep3 />} />
@@ -103,8 +58,7 @@ export default function App() {
           <Route path="step3a" element={<PromoVisualsStep3 />} />
           <Route path="step4a" element={<PromoVideoStep4 />} />
           <Route path="step5a" element={<PromoTransitionStep5 />} />
-          <Route path="admin" element={<AdminDashboard />} />
-          <Route path="archive" element={<ProjectArchive />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

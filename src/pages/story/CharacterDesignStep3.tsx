@@ -8,9 +8,16 @@ import { downloadAsset } from '../../utils/download';
 
 export default function CharacterDesignStep3() {
   const navigate = useNavigate();
-  const { characterPrompts, characterImages, setCharacterImage, setCurrentStep, markStepCompleted } = useProjectStore();
+  const {
+    characterPrompts,
+    characterImages,
+    characterDesignConfirmed,
+    setCharacterImage,
+    setCharacterDesignConfirmed,
+    setCurrentStep,
+    markStepCompleted,
+  } = useProjectStore();
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
-  const [finalizedStates, setFinalizedStates] = useState<Record<string, boolean>>({});
   const [styleReferences, setStyleReferences] = useState<string[]>([]);
   const [styleTextDescription, setStyleTextDescription] = useState<string>('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -41,8 +48,6 @@ export default function CharacterDesignStep3() {
 
   const generateImage = async (name: string, prompt: string) => {
     setLoadingStates((prev) => ({ ...prev, [name]: true }));
-    // Reset finalized state when regenerating
-    setFinalizedStates((prev) => ({ ...prev, [name]: false }));
     try {
       // Append style reference instructions if any
       let finalPrompt = prompt;
@@ -75,7 +80,7 @@ export default function CharacterDesignStep3() {
 
   const toggleFinalize = (name: string) => {
     if (!characterImages[name]) return; // Only allow finalize if image exists
-    setFinalizedStates((prev) => ({ ...prev, [name]: !prev[name] }));
+    setCharacterDesignConfirmed(name, !characterDesignConfirmed[name]);
   };
 
   const handleSaveAndNext = () => {
@@ -85,7 +90,7 @@ export default function CharacterDesignStep3() {
   };
 
   const allGenerated = characterPrompts.every((char) => characterImages[char.name]);
-  const allFinalized = characterPrompts.every((char) => finalizedStates[char.name]);
+  const allFinalized = characterPrompts.every((char) => characterDesignConfirmed[char.name]);
   const canProceed = allGenerated && allFinalized;
 
   return (
@@ -177,7 +182,7 @@ export default function CharacterDesignStep3() {
             {characterPrompts.map((char) => {
               const isLoading = loadingStates[char.name];
               const imageUrl = characterImages[char.name];
-              const isFinalized = finalizedStates[char.name];
+              const isFinalized = characterDesignConfirmed[char.name];
 
               return (
                 <div key={char.name} className={clsx(
