@@ -39,6 +39,11 @@ export interface PromoScenePrompts {
   end_frame_zh: string;
 }
 
+export interface PromoFramePromptResult {
+  prompt: string;
+  prompt_zh: string;
+}
+
 export interface PromoStoryboardScene {
   scene_number: number;
   scene_outline?: string;
@@ -210,6 +215,15 @@ const promoPromptSchema = {
     end_frame_zh: { type: Type.STRING, description: '尾幀中文翻譯' },
   },
   required: ['start_frame', 'start_frame_zh', 'end_frame', 'end_frame_zh'],
+} as const;
+
+const promoFramePromptSchema = {
+  type: Type.OBJECT,
+  properties: {
+    prompt: { type: Type.STRING, description: 'Updated frame prompt in English.' },
+    prompt_zh: { type: Type.STRING, description: 'Updated frame prompt in Traditional Chinese.' },
+  },
+  required: ['prompt', 'prompt_zh'],
 } as const;
 
 const buildPromoStoryboardSceneSchema = (aspectRatio: string) => ({
@@ -554,6 +568,39 @@ ${JSON.stringify(currentPrompts, null, 2)}
   });
 
   return parseJsonResponse<PromoScenePrompts>(response.text || '{}', 'adjustPromoPromptWithReferences');
+};
+
+export const adjustPromoFramePromptWithReferences = async (
+  frameType: 'start' | 'end',
+  userInput: string,
+  currentPrompt: { prompt: string; prompt_zh: string },
+  referenceFiles: GeminiReferenceFile[] = [],
+) => {
+  const prompt = `
+You are adjusting a single ${frameType} frame prompt for a PROMO product ad workflow.
+Return JSON only and preserve the existing response structure.
+If reference images are attached, use them as visual guidance for product appearance, character face, pose, styling, composition, and scene context.
+
+User request:
+${userInput}
+
+Current ${frameType} frame prompt:
+${JSON.stringify(currentPrompt, null, 2)}
+`;
+
+  const response = await generateTextWithUsage({
+    contents: { parts: buildParts(prompt, referenceFiles) },
+    config: {
+      responseMimeType: 'application/json',
+      systemInstruction: PROMO_PROMPT_ADJUST_SYSTEM_PROMPT,
+      responseSchema: promoFramePromptSchema,
+    },
+  });
+
+  return parseJsonResponse<PromoFramePromptResult>(
+    response.text || '{}',
+    'adjustPromoFramePromptWithReferences',
+  );
 };
 
 export const generateMusicPrompts = async ({

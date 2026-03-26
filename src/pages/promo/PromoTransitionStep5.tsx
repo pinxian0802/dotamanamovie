@@ -5,6 +5,7 @@ import { generatePromoVideo } from '../../services/geminiService';
 import { ArrowRight, ArrowLeft, Layers, RefreshCw, CheckCircle2, Loader2, Play, Plus, Video, Download, AlertCircle, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { downloadAsset } from '../../utils/download';
+import MediaPreviewModal from '../../components/MediaPreviewModal';
 
 export default function PromoTransitionStep5() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function PromoTransitionStep5() {
   
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [previewVideo, setPreviewVideo] = useState<{ src: string; title: string } | null>(null);
 
   const generateTransition = async (transitionIndex: number, transitionPrompt: string) => {
     setGenerating(prev => ({ ...prev, [transitionIndex]: true }));
@@ -183,7 +185,17 @@ export default function PromoTransitionStep5() {
                         <div className="text-xs text-neutral-500 font-mono text-center">場景 {prevScene.scene_number}</div>
                         <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
                           {promoVideos[prevScene.scene_number] ? (
-                            <video src={promoVideos[prevScene.scene_number]} className="w-full h-full object-cover" muted loop />
+                            <button
+                              onClick={() =>
+                                setPreviewVideo({
+                                  src: promoVideos[prevScene.scene_number],
+                                  title: `分鏡 ${prevScene.scene_number} 影片`,
+                                })
+                              }
+                              className="h-full w-full"
+                            >
+                              <video src={promoVideos[prevScene.scene_number]} className="w-full h-full object-cover" muted loop />
+                            </button>
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-neutral-600">
                               <Video className="w-8 h-8 opacity-50" />
@@ -205,15 +217,25 @@ export default function PromoTransitionStep5() {
 
                         <div className="w-40 bg-neutral-950 rounded-xl border-2 border-dashed border-orange-500/50 overflow-hidden relative flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.1)]" style={{ aspectRatio: '9 / 16' }}>
                           {promoTransitions[idx] ? (
-                            <video 
-                              src={promoTransitions[idx]} 
-                              className="w-full h-full object-cover"
-                              controls
-                              autoPlay
-                              loop
-                              muted
-                              crossOrigin="anonymous"
-                            />
+                            <button
+                              onClick={() =>
+                                setPreviewVideo({
+                                  src: promoTransitions[idx],
+                                  title: `轉場 ${idx + 1} 預覽`,
+                                })
+                              }
+                              className="h-full w-full"
+                            >
+                              <video 
+                                src={promoTransitions[idx]} 
+                                className="w-full h-full object-cover"
+                                controls
+                                autoPlay
+                                loop
+                                muted
+                                crossOrigin="anonymous"
+                              />
+                            </button>
                           ) : generating[idx] ? (
                             <div className="flex flex-col items-center gap-2 text-orange-500">
                               <Loader2 className="w-8 h-8 animate-spin" />
@@ -233,7 +255,17 @@ export default function PromoTransitionStep5() {
                         <div className="text-xs text-neutral-500 font-mono text-center">場景 {nextScene.scene_number}</div>
                         <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
                           {promoVideos[nextScene.scene_number] ? (
-                            <video src={promoVideos[nextScene.scene_number]} className="w-full h-full object-cover" muted loop />
+                            <button
+                              onClick={() =>
+                                setPreviewVideo({
+                                  src: promoVideos[nextScene.scene_number],
+                                  title: `分鏡 ${nextScene.scene_number} 影片`,
+                                })
+                              }
+                              className="h-full w-full"
+                            >
+                              <video src={promoVideos[nextScene.scene_number]} className="w-full h-full object-cover" muted loop />
+                            </button>
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-neutral-600">
                               <Video className="w-8 h-8 opacity-50" />
@@ -261,6 +293,13 @@ export default function PromoTransitionStep5() {
           </div>
         )}
       </div>
+      <MediaPreviewModal
+        open={Boolean(previewVideo)}
+        onClose={() => setPreviewVideo(null)}
+        src={previewVideo?.src || null}
+        mediaType="video"
+        title={previewVideo?.title}
+      />
     </div>
   );
 }

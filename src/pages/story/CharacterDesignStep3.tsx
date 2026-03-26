@@ -5,6 +5,7 @@ import { Image as ImageIcon, Loader2, Save, Upload, RefreshCw, CheckCircle2, Dow
 import { clsx } from 'clsx';
 import { generateImage as generateImageApi } from '../../services/geminiService';
 import { downloadAsset } from '../../utils/download';
+import MediaPreviewModal from '../../components/MediaPreviewModal';
 
 export default function CharacterDesignStep3() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function CharacterDesignStep3() {
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
   const [styleReferences, setStyleReferences] = useState<string[]>([]);
   const [styleTextDescription, setStyleTextDescription] = useState<string>('');
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -232,7 +234,12 @@ export default function CharacterDesignStep3() {
                           <span className="text-sm font-medium">生成中...</span>
                         </div>
                       ) : imageUrl ? (
-                        <img src={imageUrl} alt={char.name} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => setPreviewImage({ src: imageUrl, title: `${char.name} 角色圖` })}
+                          className="h-full w-full"
+                        >
+                          <img src={imageUrl} alt={char.name} className="w-full h-full object-cover" />
+                        </button>
                       ) : (
                         <div className="text-neutral-600 flex flex-col items-center gap-2">
                           <ImageIcon className="w-8 h-8 opacity-50" />
@@ -252,6 +259,13 @@ export default function CharacterDesignStep3() {
         </div>
 
       </div>
+      <MediaPreviewModal
+        open={Boolean(previewImage)}
+        onClose={() => setPreviewImage(null)}
+        src={previewImage?.src || null}
+        mediaType="image"
+        title={previewImage?.title}
+      />
     </div>
   );
 }

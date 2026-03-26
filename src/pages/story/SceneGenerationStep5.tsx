@@ -5,6 +5,7 @@ import { ImageIcon, Loader2, Save, RefreshCw, Upload, Download } from 'lucide-re
 import { clsx } from 'clsx';
 import { generateScenePrompts as generateScenePromptsApi, generateImage as generateImageApi } from '../../services/geminiService';
 import { downloadAsset } from '../../utils/download';
+import MediaPreviewModal from '../../components/MediaPreviewModal';
 
 export default function SceneGenerationStep5() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export default function SceneGenerationStep5() {
   const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false);
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
   const [sceneReferences, setSceneReferences] = useState<string[]>([]);
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -242,7 +244,12 @@ export default function SceneGenerationStep5() {
                           <span className="font-medium">生成場景中...</span>
                         </div>
                       ) : imageUrl ? (
-                        <img src={imageUrl} alt={`Scene ${scene.sceneNumber}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => setPreviewImage({ src: imageUrl, title: `場景 ${scene.sceneNumber}` })}
+                          className="h-full w-full"
+                        >
+                          <img src={imageUrl} alt={`Scene ${scene.sceneNumber}`} className="w-full h-full object-cover" />
+                        </button>
                       ) : (
                         <div className="text-neutral-600 flex flex-col items-center gap-3">
                           <ImageIcon className="w-12 h-12 opacity-50" />
@@ -257,6 +264,13 @@ export default function SceneGenerationStep5() {
           </div>
         )}
       </div>
+      <MediaPreviewModal
+        open={Boolean(previewImage)}
+        onClose={() => setPreviewImage(null)}
+        src={previewImage?.src || null}
+        mediaType="image"
+        title={previewImage?.title}
+      />
     </div>
   );
 }

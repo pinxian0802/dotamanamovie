@@ -8,17 +8,16 @@ import { clsx } from 'clsx';
 
 export default function PromoScriptStep2() {
   const navigate = useNavigate();
-  const { setPromoScriptData, markStepCompleted, setCurrentStep, promoScriptData } = useProjectStore();
-
-  const [productName, setProductName] = useState('');
-  const [productFeatures, setProductFeatures] = useState('');
-  const [productContents, setProductContents] = useState('');
-  const [productOrigin, setProductOrigin] = useState('');
-  const [totalDurationSeconds, setTotalDurationSeconds] = useState('15');
-  const [aspectRatio, setAspectRatio] = useState('9:16');
-  const [includeCharacters, setIncludeCharacters] = useState(false);
-  const [supplementaryText, setSupplementaryText] = useState('');
-  const [referenceFiles, setReferenceFiles] = useState<{ mimeType: string; data: string; name: string }[]>([]);
+  const {
+    setPromoScriptData,
+    markStepCompleted,
+    setCurrentStep,
+    promoScriptData,
+    promoScriptForm,
+    setPromoScriptForm,
+    addPromoScriptReferenceFiles,
+    removePromoScriptReferenceFile,
+  } = useProjectStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
@@ -59,8 +58,7 @@ export default function PromoScriptStep2() {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = (reader.result as string).split(',')[1];
-        setReferenceFiles((prev) => [
-          ...prev,
+        addPromoScriptReferenceFiles([
           {
             mimeType: file.type,
             data: base64String,
@@ -75,10 +73,22 @@ export default function PromoScriptStep2() {
   };
 
   const removeFile = (index: number) => {
-    setReferenceFiles((prev) => prev.filter((_, i) => i !== index));
+    removePromoScriptReferenceFile(index);
   };
 
   const handleGenerate = async () => {
+    const {
+      productName,
+      productFeatures,
+      productContents,
+      productOrigin,
+      totalDurationSeconds,
+      aspectRatio,
+      includeCharacters,
+      supplementaryText,
+      referenceFiles,
+    } = promoScriptForm;
+
     if (!productName || !productFeatures) return;
 
     setIsGenerating(true);
@@ -150,8 +160,8 @@ export default function PromoScriptStep2() {
               <label className="block text-sm font-medium text-neutral-400 mb-1">產品名稱</label>
               <input
                 type="text"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
+                value={promoScriptForm.productName}
+                onChange={(e) => setPromoScriptForm({ productName: e.target.value })}
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500/50"
                 placeholder="例如：膠原蛋白氣泡飲"
               />
@@ -160,8 +170,8 @@ export default function PromoScriptStep2() {
             <div>
               <label className="block text-sm font-medium text-neutral-400 mb-1">核心概念 / 賣點</label>
               <textarea
-                value={productFeatures}
-                onChange={(e) => setProductFeatures(e.target.value)}
+                value={promoScriptForm.productFeatures}
+                onChange={(e) => setPromoScriptForm({ productFeatures: e.target.value })}
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500/50 h-24 resize-none"
                 placeholder="請描述想打的核心價值、功效與受眾感受"
               />
@@ -171,8 +181,8 @@ export default function PromoScriptStep2() {
               <label className="block text-sm font-medium text-neutral-400 mb-1">成分 / 內容物</label>
               <input
                 type="text"
-                value={productContents}
-                onChange={(e) => setProductContents(e.target.value)}
+                value={promoScriptForm.productContents}
+                onChange={(e) => setPromoScriptForm({ productContents: e.target.value })}
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500/50"
                 placeholder="例如：維他命 C、膠原蛋白、氣泡飲配方"
               />
@@ -182,8 +192,8 @@ export default function PromoScriptStep2() {
               <label className="block text-sm font-medium text-neutral-400 mb-1">產地 / 補充資訊</label>
               <input
                 type="text"
-                value={productOrigin}
-                onChange={(e) => setProductOrigin(e.target.value)}
+                value={promoScriptForm.productOrigin}
+                onChange={(e) => setPromoScriptForm({ productOrigin: e.target.value })}
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500/50"
                 placeholder="例如：日本、台灣製造、冷藏保存"
               />
@@ -196,16 +206,16 @@ export default function PromoScriptStep2() {
                   type="number"
                   min="3"
                   step="1"
-                  value={totalDurationSeconds}
-                  onChange={(e) => setTotalDurationSeconds(e.target.value)}
+                  value={promoScriptForm.totalDurationSeconds}
+                  onChange={(e) => setPromoScriptForm({ totalDurationSeconds: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500/50"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-neutral-400 mb-1">畫面比例</label>
                 <select
-                  value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value)}
+                  value={promoScriptForm.aspectRatio}
+                  onChange={(e) => setPromoScriptForm({ aspectRatio: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500/50"
                 >
                   <option value="9:16">9:16 直式短影音</option>
@@ -219,8 +229,8 @@ export default function PromoScriptStep2() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={includeCharacters}
-                  onChange={(e) => setIncludeCharacters(e.target.checked)}
+                  checked={promoScriptForm.includeCharacters}
+                  onChange={(e) => setPromoScriptForm({ includeCharacters: e.target.checked })}
                   className="w-4 h-4 rounded border-neutral-700 text-orange-500 focus:ring-orange-500/50 bg-neutral-950"
                 />
                 <span className="text-sm font-medium text-neutral-400">允許人物入鏡</span>
@@ -230,8 +240,8 @@ export default function PromoScriptStep2() {
             <div className="pt-4 border-t border-neutral-800/50">
               <label className="block text-sm font-medium text-neutral-400 mb-1">風格設定 / 補充需求</label>
               <textarea
-                value={supplementaryText}
-                onChange={(e) => setSupplementaryText(e.target.value)}
+                value={promoScriptForm.supplementaryText}
+                onChange={(e) => setPromoScriptForm({ supplementaryText: e.target.value })}
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500/50 h-24 resize-none mb-3"
                 placeholder="例如：高級精品感、清晨冷調、玻璃質感、開場前 3 秒要很抓眼球"
               />
@@ -243,9 +253,9 @@ export default function PromoScriptStep2() {
                   <input type="file" accept="image/*,video/mp4,video/webm" multiple className="hidden" onChange={handleFileUpload} />
                 </label>
 
-                {referenceFiles.length > 0 && (
+                {promoScriptForm.referenceFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {referenceFiles.map((file, idx) => (
+                    {promoScriptForm.referenceFiles.map((file, idx) => (
                       <div key={idx} className="flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-400">
                         <span className="truncate" style={{ maxWidth: 120 }}>{file.name}</span>
                         <button onClick={() => removeFile(idx)} className="text-neutral-500 hover:text-red-400 transition-colors">
@@ -261,7 +271,7 @@ export default function PromoScriptStep2() {
 
           <button
             onClick={handleGenerate}
-            disabled={isGenerating || !productName || !productFeatures}
+            disabled={isGenerating || !promoScriptForm.productName || !promoScriptForm.productFeatures}
             className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors border border-neutral-700"
           >
             {isGenerating ? (

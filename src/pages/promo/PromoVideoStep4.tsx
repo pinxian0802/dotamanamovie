@@ -5,6 +5,7 @@ import { adjustPromoPrompt, generatePromoVideo } from '../../services/geminiServ
 import { ArrowRight, ArrowLeft, Video, RefreshCw, CheckCircle2, Loader2, Play, Download, AlertCircle, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { downloadAsset } from '../../utils/download';
+import MediaPreviewModal from '../../components/MediaPreviewModal';
 
 export default function PromoVideoStep4() {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ export default function PromoVideoStep4() {
   const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<{ src: string; title: string; mediaType: 'image' | 'video' } | null>(null);
 
   const generateVideo = async (sceneNumber: number, videoPrompt: string) => {
     setGenerating(prev => ({ ...prev, [sceneNumber]: true }));
@@ -195,7 +197,18 @@ export default function PromoVideoStep4() {
                 <div className="text-xs text-neutral-500 font-mono text-center">首幀圖</div>
                 <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
                   {promoImages[scene.scene_number]?.start && (
-                    <img src={promoImages[scene.scene_number].start} alt="Start" className="w-full h-full object-cover" />
+                    <button
+                      onClick={() =>
+                        setPreviewMedia({
+                          src: promoImages[scene.scene_number].start,
+                          title: `分鏡 ${scene.scene_number} 首幀`,
+                          mediaType: 'image',
+                        })
+                      }
+                      className="h-full w-full"
+                    >
+                      <img src={promoImages[scene.scene_number].start} alt="Start" className="w-full h-full object-cover" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -216,15 +229,26 @@ export default function PromoVideoStep4() {
 
                 <div className="w-40 bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden relative flex items-center justify-center" style={{ aspectRatio: '9 / 16' }}>
                   {promoVideos[scene.scene_number] ? (
-                    <video 
-                      src={promoVideos[scene.scene_number]} 
-                      className="w-full h-full object-cover"
-                      controls
-                      autoPlay
-                      loop
-                      muted
-                      crossOrigin="anonymous"
-                    />
+                    <button
+                      onClick={() =>
+                        setPreviewMedia({
+                          src: promoVideos[scene.scene_number],
+                          title: `分鏡 ${scene.scene_number} 影片`,
+                          mediaType: 'video',
+                        })
+                      }
+                      className="h-full w-full"
+                    >
+                      <video 
+                        src={promoVideos[scene.scene_number]} 
+                        className="w-full h-full object-cover"
+                        controls
+                        autoPlay
+                        loop
+                        muted
+                        crossOrigin="anonymous"
+                      />
+                    </button>
                   ) : generating[scene.scene_number] ? (
                     <div className="flex flex-col items-center gap-3 text-orange-500 w-full px-4">
                       <Loader2 className="w-8 h-8 animate-spin" />
@@ -250,7 +274,18 @@ export default function PromoVideoStep4() {
                 <div className="text-xs text-neutral-500 font-mono text-center">尾幀圖</div>
                 <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
                   {promoImages[scene.scene_number]?.end && (
-                    <img src={promoImages[scene.scene_number].end} alt="End" className="w-full h-full object-cover" />
+                    <button
+                      onClick={() =>
+                        setPreviewMedia({
+                          src: promoImages[scene.scene_number].end,
+                          title: `分鏡 ${scene.scene_number} 尾幀`,
+                          mediaType: 'image',
+                        })
+                      }
+                      className="h-full w-full"
+                    >
+                      <img src={promoImages[scene.scene_number].end} alt="End" className="w-full h-full object-cover" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -279,6 +314,13 @@ export default function PromoVideoStep4() {
           ))}
         </div>
       </div>
+      <MediaPreviewModal
+        open={Boolean(previewMedia)}
+        onClose={() => setPreviewMedia(null)}
+        src={previewMedia?.src || null}
+        mediaType={previewMedia?.mediaType || 'image'}
+        title={previewMedia?.title}
+      />
     </div>
   );
 }

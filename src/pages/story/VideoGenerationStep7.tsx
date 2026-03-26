@@ -4,11 +4,13 @@ import { useProjectStore } from '../../store/useProjectStore';
 import { Video, Loader2, Play, CheckCircle2, Download } from 'lucide-react';
 import { clsx } from 'clsx';
 import { downloadAsset } from '../../utils/download';
+import MediaPreviewModal from '../../components/MediaPreviewModal';
 
 export default function VideoGenerationStep7() {
   const navigate = useNavigate();
   const { scenePrompts, compositedScenes, videoScenes, setVideoScene, setCurrentStep, markStepCompleted } = useProjectStore();
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
+  const [previewMedia, setPreviewMedia] = useState<{ src: string; title: string; mediaType: 'image' | 'video' } | null>(null);
 
   useEffect(() => {
     setCurrentStep(7);
@@ -81,7 +83,12 @@ export default function VideoGenerationStep7() {
                     </span>
                   </div>
                   <div className="aspect-video rounded-xl overflow-hidden bg-neutral-900 border border-neutral-700 relative">
-                    <img src={baseImage} alt="Base" className="w-full h-full object-cover" />
+                    <button
+                      onClick={() => setPreviewMedia({ src: baseImage, title: `分鏡 ${scene.sceneNumber} 基底圖`, mediaType: 'image' })}
+                      className="h-full w-full"
+                    >
+                      <img src={baseImage} alt="Base" className="w-full h-full object-cover" />
+                    </button>
                   </div>
                   <div className="text-sm text-neutral-400 bg-neutral-900/50 p-3 rounded-lg border border-neutral-800">
                     <p className="font-semibold text-neutral-300 mb-1">動態提示詞：</p>
@@ -126,14 +133,23 @@ export default function VideoGenerationStep7() {
                     videoUrl ? "border-indigo-500/50 bg-neutral-900" : "border-dashed border-neutral-700 bg-neutral-800/50"
                   )}>
                     {videoUrl ? (
-                      <>
+                      <button
+                        onClick={() =>
+                          setPreviewMedia({
+                            src: videoUrl,
+                            title: `分鏡 ${scene.sceneNumber} 影片預覽`,
+                            mediaType: videoUrl.endsWith('.mp4') || videoUrl.startsWith('blob:') ? 'video' : 'image',
+                          })
+                        }
+                        className="relative h-full w-full"
+                      >
                         <img src={videoUrl} alt="Video Thumbnail" className="w-full h-full object-cover opacity-80" />
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/10">
                             <Play className="w-8 h-8 text-white ml-1" />
                           </div>
                         </div>
-                      </>
+                      </button>
                     ) : (
                       <div className="text-neutral-500 flex flex-col items-center gap-2">
                         <Video className="w-8 h-8 opacity-50" />
@@ -147,6 +163,13 @@ export default function VideoGenerationStep7() {
           })}
         </div>
       </div>
+      <MediaPreviewModal
+        open={Boolean(previewMedia)}
+        onClose={() => setPreviewMedia(null)}
+        src={previewMedia?.src || null}
+        mediaType={previewMedia?.mediaType || 'image'}
+        title={previewMedia?.title}
+      />
     </div>
   );
 }

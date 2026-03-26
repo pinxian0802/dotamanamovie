@@ -66,6 +66,24 @@ export interface PromoScriptData {
   storyboard: PromoStoryboardScene[];
 }
 
+export interface PromoReferenceFile {
+  mimeType: string;
+  data: string;
+  name: string;
+}
+
+export interface PromoScriptFormData {
+  productName: string;
+  productFeatures: string;
+  productContents: string;
+  productOrigin: string;
+  totalDurationSeconds: string;
+  aspectRatio: string;
+  includeCharacters: boolean;
+  supplementaryText: string;
+  referenceFiles: PromoReferenceFile[];
+}
+
 export interface GeminiUsageEntry {
   id: string;
   model: string;
@@ -120,6 +138,10 @@ interface ProjectState {
   setFinalVideo: (url: string | null) => void;
 
   // Promo Workflow
+  promoScriptForm: PromoScriptFormData;
+  setPromoScriptForm: (data: Partial<PromoScriptFormData>) => void;
+  addPromoScriptReferenceFiles: (files: PromoReferenceFile[]) => void;
+  removePromoScriptReferenceFile: (index: number) => void;
   promoScriptData: PromoScriptData | null;
   setPromoScriptData: (data: PromoScriptData | null) => void;
   updatePromoScenePrompts: (sceneNumber: number, prompts: Partial<PromoStoryboardScene['nano_banana_pro_prompts']>) => void;
@@ -217,6 +239,38 @@ export const useProjectStore = create<ProjectState>()(
   finalVideo: null,
   setFinalVideo: (url) => set({ finalVideo: url }),
 
+  promoScriptForm: {
+    productName: '',
+    productFeatures: '',
+    productContents: '',
+    productOrigin: '',
+    totalDurationSeconds: '15',
+    aspectRatio: '9:16',
+    includeCharacters: false,
+    supplementaryText: '',
+    referenceFiles: [],
+  },
+  setPromoScriptForm: (data) =>
+    set((state) => ({
+      promoScriptForm: {
+        ...state.promoScriptForm,
+        ...data,
+      },
+    })),
+  addPromoScriptReferenceFiles: (files) =>
+    set((state) => ({
+      promoScriptForm: {
+        ...state.promoScriptForm,
+        referenceFiles: [...state.promoScriptForm.referenceFiles, ...files],
+      },
+    })),
+  removePromoScriptReferenceFile: (index) =>
+    set((state) => ({
+      promoScriptForm: {
+        ...state.promoScriptForm,
+        referenceFiles: state.promoScriptForm.referenceFiles.filter((_, currentIndex) => currentIndex !== index),
+      },
+    })),
   promoScriptData: null,
   setPromoScriptData: (data) => set({ promoScriptData: data }),
   updatePromoScenePrompts: (sceneNumber, prompts) => set((state) => {
@@ -422,6 +476,17 @@ export const useProjectStore = create<ProjectState>()(
     compositedScenes: {},
     videoScenes: {},
     voiceScenes: {},
+    promoScriptForm: {
+      productName: '',
+      productFeatures: '',
+      productContents: '',
+      productOrigin: '',
+      totalDurationSeconds: '15',
+      aspectRatio: '9:16',
+      includeCharacters: false,
+      supplementaryText: '',
+      referenceFiles: [],
+    },
     promoScriptData: null,
     promoImageConfirmed: {},
     promoImages: {},

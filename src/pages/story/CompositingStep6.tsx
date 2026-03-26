@@ -5,11 +5,13 @@ import { ImageIcon, Loader2, Save, RefreshCw, CheckCircle2, Download } from 'luc
 import { clsx } from 'clsx';
 import { downloadAsset } from '../../utils/download';
 import { generateImage as generateImageApi } from '../../services/geminiService';
+import MediaPreviewModal from '../../components/MediaPreviewModal';
 
 export default function CompositingStep6() {
   const navigate = useNavigate();
   const { scenePrompts, sceneImages, characterImages, compositedScenes, setCompositedScene, setCurrentStep, markStepCompleted } = useProjectStore();
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
   useEffect(() => {
     setCurrentStep(6);
@@ -96,7 +98,12 @@ export default function CompositingStep6() {
                     <div>
                       <p className="text-xs text-neutral-400 mb-2">場景底圖</p>
                       <div className="aspect-video rounded-xl overflow-hidden border border-neutral-700 bg-neutral-900">
-                        <img src={sceneImage} alt={`Scene ${scene.sceneNumber}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => setPreviewImage({ src: sceneImage, title: `場景 ${scene.sceneNumber}` })}
+                          className="h-full w-full"
+                        >
+                          <img src={sceneImage} alt={`Scene ${scene.sceneNumber}`} className="w-full h-full object-cover" />
+                        </button>
                       </div>
                     </div>
                     
@@ -104,7 +111,12 @@ export default function CompositingStep6() {
                       <div>
                         <p className="text-xs text-neutral-400 mb-2">角色素材 (示意)</p>
                         <div className="w-24 aspect-[3/4] rounded-lg overflow-hidden border border-neutral-700 bg-neutral-900">
-                          <img src={firstCharacterImage} alt="Character" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => setPreviewImage({ src: firstCharacterImage, title: '角色參考圖' })}
+                            className="h-full w-full"
+                          >
+                            <img src={firstCharacterImage} alt="Character" className="w-full h-full object-cover" />
+                          </button>
                         </div>
                       </div>
                     )}
@@ -142,7 +154,12 @@ export default function CompositingStep6() {
                         <span className="font-medium">AI 正在進行影像合成...</span>
                       </div>
                     ) : compositedImage ? (
-                      <img src={compositedImage} alt={`Composited ${scene.sceneNumber}`} className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => setPreviewImage({ src: compositedImage, title: `合成場景 ${scene.sceneNumber}` })}
+                        className="h-full w-full"
+                      >
+                        <img src={compositedImage} alt={`Composited ${scene.sceneNumber}`} className="w-full h-full object-cover" />
+                      </button>
                     ) : (
                       <div className="text-neutral-600 flex flex-col items-center gap-3">
                         <ImageIcon className="w-12 h-12 opacity-50" />
@@ -156,6 +173,13 @@ export default function CompositingStep6() {
           })}
         </div>
       </div>
+      <MediaPreviewModal
+        open={Boolean(previewImage)}
+        onClose={() => setPreviewImage(null)}
+        src={previewImage?.src || null}
+        mediaType="image"
+        title={previewImage?.title}
+      />
     </div>
   );
 }

@@ -15,21 +15,30 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useProjectStore } from '../../store/useProjectStore';
+import MediaPreviewModal from '../../components/MediaPreviewModal';
 import {
-  adjustPromoPromptWithReferences,
+  adjustPromoFramePromptWithReferences,
   GeminiReferenceFile,
-  PromoScenePrompts,
+  PromoFramePromptResult,
   generateImage,
 } from '../../services/geminiService';
 import { downloadAsset } from '../../utils/download';
 
 type PromptField = 'start_frame' | 'start_frame_zh' | 'end_frame' | 'end_frame_zh';
+type FrameType = 'start' | 'end';
 
 type SceneReferenceImage = GeminiReferenceFile & {
   id: string;
   name: string;
   previewUrl: string;
 };
+
+const getFrameAdjustKey = (sceneNumber: number, frameType: FrameType) => `${sceneNumber}-${frameType}`;
+
+const getFramePromptFields = (frameType: FrameType): { prompt: PromptField; promptZh: PromptField } =>
+  frameType === 'start'
+    ? { prompt: 'start_frame', promptZh: 'start_frame_zh' }
+    : { prompt: 'end_frame', promptZh: 'end_frame_zh' };
 
 const readReferenceImage = (file: File): Promise<SceneReferenceImage> =>
   new Promise((resolve, reject) => {
@@ -74,11 +83,12 @@ export default function PromoVisualsStep3() {
   } = useProjectStore();
 
   const [baseImages, setBaseImages] = useState<string[]>([]);
-  const [sceneReferenceImages, setSceneReferenceImages] = useState<Record<number, SceneReferenceImage[]>>({});
+  const [frameReferenceImages, setFrameReferenceImages] = useState<Record<string, SceneReferenceImage[]>>({});
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
-  const [adjusting, setAdjusting] = useState<Record<number, boolean>>({});
-  const [adjustInputs, setAdjustInputs] = useState<Record<number, string>>({});
+  const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
+  const [adjustInputs, setAdjustInputs] = useState<Record<string, string>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const baseImageInputRef = useRef<HTMLInputElement>(null);
 
   const handleBaseImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,8 +109,9 @@ export default function PromoVisualsStep3() {
     event.target.value = '';
   };
 
-  const handleSceneReferenceUpload = async (
+  const handleFrameReferenceUpload = async (
     sceneNumber: number,
+    frameType: FrameType,
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = event.target.files;
@@ -108,9 +119,10 @@ export default function PromoVisualsStep3() {
 
     try {
       const references = await Promise.all(Array.from(files).map(readReferenceImage));
-      setSceneReferenceImages((prev) => ({
+      const adjustKey = getFrameAdjustKey(sceneNumber, frameType);
+      setFrameReferenceImages((prev) => ({
         ...prev,
-        [sceneNumber]: [...(prev[sceneNumber] || []), ...references],
+        [adjustKey]: [...(prev[adjustKey] || []), ...references],
       }));
     } catch (error) {
       console.error('Failed to read scene reference images:', error);
@@ -124,10 +136,11 @@ export default function PromoVisualsStep3() {
     setBaseImages((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const removeSceneReferenceImage = (sceneNumber: number, imageId: string) => {
-    setSceneReferenceImages((prev) => ({
+  const removeFrameReferenceImage = (sceneNumber: number, frameType: FrameType, imageId: string) => {
+    const adjustKey = getFrameAdjustKey(sceneNumber, frameType);
+    setFrameReferenceImages((prev) => ({
       ...prev,
-      [sceneNumber]: (prev[sceneNumber] || []).filter((image) => image.id !== imageId),
+      [adjustKey]: (prev[adjustKey] || []).filter((image) => image.id !== imageId),
     }));
   };
 
@@ -187,23 +200,32 @@ export default function PromoVisualsStep3() {
     setPromoImageConfirmed(key, !promoImageConfirmed[key]);
   };
 
-  const handlePromptAdjust = async (sceneNumber: number, currentPrompts: PromoScenePrompts) => {
-    const userInput = adjustInputs[sceneNumber]?.trim();
+  const handlePromptAdjust = async (
+    sceneNumber: number,
+    frameType: FrameType,
+    currentPrompt: PromoFramePromptResult,
+  ) => {
+    const adjustKey = getFrameAdjustKey(sceneNumber, frameType);
+    const userInput = adjustInputs[adjustKey]?.trim();
     if (!userInput) return;
 
-    setAdjusting((prev) => ({ ...prev, [sceneNumber]: true }));
+    setAdjusting((prev) => ({ ...prev, [adjustKey]: true }));
     setErrorMsg(null);
 
     try {
-      const references = (sceneReferenceImages[sceneNumber] || []).map(({ previewUrl, id, name, ...file }) => file);
-      const data = await adjustPromoPromptWithReferences(userInput, currentPrompts, references);
-      updatePromoScenePrompts(sceneNumber, data);
-      setAdjustInputs((prev) => ({ ...prev, [sceneNumber]: '' }));
+      const references = (frameReferenceImages[adjustKey] || []).map(({ previewUrl, id, name, ...file }) => file);
+      const data = await adjustPromoFramePromptWithReferences(frameType, userInput, currentPrompt, references);
+      const fields = getFramePromptFields(frameType);
+      updatePromoScenePrompts(sceneNumber, {
+        [fields.prompt]: data.prompt,
+        [fields.promptZh]: data.prompt_zh,
+      });
+      setAdjustInputs((prev) => ({ ...prev, [adjustKey]: '' }));
     } catch (error) {
       console.error('Adjust prompt error:', error);
       setErrorMsg('提示詞調整失敗，請稍後再試，或直接手動修改上方提示詞。');
     } finally {
-      setAdjusting((prev) => ({ ...prev, [sceneNumber]: false }));
+      setAdjusting((prev) => ({ ...prev, [adjustKey]: false }));
     }
   };
 
@@ -323,7 +345,9 @@ export default function PromoVisualsStep3() {
               const startKey = `${scene.scene_number}-start`;
               const endKey = `${scene.scene_number}-end`;
               const generatedImages = promoImages[scene.scene_number];
-              const uploadedReferences = sceneReferenceImages[scene.scene_number] || [];
+              const startReferences = frameReferenceImages[startKey] || [];
+              const endReferences = frameReferenceImages[endKey] || [];
+              const uploadedReferences = [...startReferences, ...endReferences];
 
               return (
                 <div key={scene.scene_number} className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-6">
@@ -416,7 +440,17 @@ export default function PromoVisualsStep3() {
                         style={{ aspectRatio: '9 / 16' }}
                       >
                         {generatedImages?.start ? (
-                          <img src={generatedImages.start} alt="Start Frame" className="h-full w-full object-cover" />
+                          <button
+                            onClick={() =>
+                              setPreviewImage({
+                                src: generatedImages.start,
+                                title: `分鏡 ${scene.scene_number} 首幀`,
+                              })
+                            }
+                            className="h-full w-full"
+                          >
+                            <img src={generatedImages.start} alt="Start Frame" className="h-full w-full object-cover" />
+                          </button>
                         ) : generating[startKey] ? (
                           <div className="flex flex-col items-center gap-2 text-orange-500">
                             <Loader2 className="h-8 w-8 animate-spin" />
@@ -461,6 +495,110 @@ export default function PromoVisualsStep3() {
                             rows={3}
                             className="w-full resize-y rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-300 outline-none transition-colors focus:border-orange-500/60"
                           />
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4">
+                        <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
+                          <Sparkles className="h-4 w-4" />
+                          AI Assist for Start Frame
+                        </div>
+                        <div className="mb-4 rounded-xl border border-neutral-800/60 bg-black/20 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-neutral-200">Start frame references</div>
+                              <div className="text-xs text-neutral-400">
+                                Upload pose, face, product, styling, or scene images just for the start frame prompt.
+                              </div>
+                            </div>
+                            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 transition-colors hover:border-orange-500/50 hover:text-orange-300">
+                              <Upload className="h-4 w-4" />
+                              Upload refs
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(event) => handleFrameReferenceUpload(scene.scene_number, 'start', event)}
+                              />
+                            </label>
+                          </div>
+
+                          {startReferences.length > 0 ? (
+                            <div className="flex flex-wrap gap-3">
+                              {startReferences.map((image) => (
+                                <div
+                                  key={image.id}
+                                  className="group relative w-24 overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900"
+                                >
+                                  <div className="aspect-square overflow-hidden">
+                                    <img src={image.previewUrl} alt={image.name} className="h-full w-full object-cover" />
+                                  </div>
+                                  <div className="truncate border-t border-neutral-800 px-2 py-1 text-[11px] text-neutral-400">
+                                    {image.name}
+                                  </div>
+                                  <button
+                                    onClick={() => removeFrameReferenceImage(scene.scene_number, 'start', image.id)}
+                                    className="absolute right-1 top-1 rounded-full bg-black/65 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-neutral-800 px-4 py-5 text-sm text-neutral-500">
+                              No start-frame references yet. Add images if you want Gemini to follow a specific look.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-3 md:flex-row">
+                          <input
+                            type="text"
+                            value={adjustInputs[startKey] || ''}
+                            onChange={(event) => {
+                              const nextValue = event.currentTarget.value;
+                              setAdjustInputs((prev) => ({
+                                ...prev,
+                                [startKey]: nextValue,
+                              }));
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                handlePromptAdjust(scene.scene_number, 'start', {
+                                  prompt: scene.nano_banana_pro_prompts.start_frame,
+                                  prompt_zh: scene.nano_banana_pro_prompts.start_frame_zh,
+                                });
+                              }
+                            }}
+                            disabled={adjusting[startKey]}
+                            placeholder={`Tell Gemini how to refine scene ${scene.scene_number} start frame.`}
+                            className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-orange-500/50 disabled:opacity-50"
+                          />
+                          <button
+                            onClick={() =>
+                              handlePromptAdjust(scene.scene_number, 'start', {
+                                prompt: scene.nano_banana_pro_prompts.start_frame,
+                                prompt_zh: scene.nano_banana_pro_prompts.start_frame_zh,
+                              })
+                            }
+                            disabled={adjusting[startKey] || !adjustInputs[startKey]?.trim()}
+                            className="flex min-w-40 items-center justify-center gap-2 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-200 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {adjusting[startKey] ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Adjusting...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-4 w-4" />
+                                AI adjust start
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -528,7 +666,17 @@ export default function PromoVisualsStep3() {
                         style={{ aspectRatio: '9 / 16' }}
                       >
                         {generatedImages?.end ? (
-                          <img src={generatedImages.end} alt="End Frame" className="h-full w-full object-cover" />
+                          <button
+                            onClick={() =>
+                              setPreviewImage({
+                                src: generatedImages.end,
+                                title: `分鏡 ${scene.scene_number} 尾幀`,
+                              })
+                            }
+                            className="h-full w-full"
+                          >
+                            <img src={generatedImages.end} alt="End Frame" className="h-full w-full object-cover" />
+                          </button>
                         ) : generating[endKey] ? (
                           <div className="flex flex-col items-center gap-2 text-orange-500">
                             <Loader2 className="h-8 w-8 animate-spin" />
@@ -584,10 +732,114 @@ export default function PromoVisualsStep3() {
                           />
                         </div>
                       </div>
+
+                      <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4">
+                        <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
+                          <Sparkles className="h-4 w-4" />
+                          AI Assist for End Frame
+                        </div>
+                        <div className="mb-4 rounded-xl border border-neutral-800/60 bg-black/20 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-neutral-200">End frame references</div>
+                              <div className="text-xs text-neutral-400">
+                                Upload pose, face, product, styling, or scene images just for the end frame prompt.
+                              </div>
+                            </div>
+                            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 transition-colors hover:border-orange-500/50 hover:text-orange-300">
+                              <Upload className="h-4 w-4" />
+                              Upload refs
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(event) => handleFrameReferenceUpload(scene.scene_number, 'end', event)}
+                              />
+                            </label>
+                          </div>
+
+                          {endReferences.length > 0 ? (
+                            <div className="flex flex-wrap gap-3">
+                              {endReferences.map((image) => (
+                                <div
+                                  key={image.id}
+                                  className="group relative w-24 overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900"
+                                >
+                                  <div className="aspect-square overflow-hidden">
+                                    <img src={image.previewUrl} alt={image.name} className="h-full w-full object-cover" />
+                                  </div>
+                                  <div className="truncate border-t border-neutral-800 px-2 py-1 text-[11px] text-neutral-400">
+                                    {image.name}
+                                  </div>
+                                  <button
+                                    onClick={() => removeFrameReferenceImage(scene.scene_number, 'end', image.id)}
+                                    className="absolute right-1 top-1 rounded-full bg-black/65 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-neutral-800 px-4 py-5 text-sm text-neutral-500">
+                              No end-frame references yet. Add images if you want Gemini to follow a specific look.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-3 md:flex-row">
+                          <input
+                            type="text"
+                            value={adjustInputs[endKey] || ''}
+                            onChange={(event) => {
+                              const nextValue = event.currentTarget.value;
+                              setAdjustInputs((prev) => ({
+                                ...prev,
+                                [endKey]: nextValue,
+                              }));
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                handlePromptAdjust(scene.scene_number, 'end', {
+                                  prompt: scene.nano_banana_pro_prompts.end_frame,
+                                  prompt_zh: scene.nano_banana_pro_prompts.end_frame_zh,
+                                });
+                              }
+                            }}
+                            disabled={adjusting[endKey]}
+                            placeholder={`Tell Gemini how to refine scene ${scene.scene_number} end frame.`}
+                            className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-orange-500/50 disabled:opacity-50"
+                          />
+                          <button
+                            onClick={() =>
+                              handlePromptAdjust(scene.scene_number, 'end', {
+                                prompt: scene.nano_banana_pro_prompts.end_frame,
+                                prompt_zh: scene.nano_banana_pro_prompts.end_frame_zh,
+                              })
+                            }
+                            disabled={adjusting[endKey] || !adjustInputs[endKey]?.trim()}
+                            className="flex min-w-40 items-center justify-center gap-2 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-200 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {adjusting[endKey] ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Adjusting...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-4 w-4" />
+                                AI adjust end
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950/50 p-4">
+                  <div className="mt-6 hidden rounded-xl border border-neutral-800 bg-neutral-950/50 p-4">
                     <div className="mb-3 flex items-center gap-2 text-sm text-orange-300">
                       <Sparkles className="h-4 w-4" />
                       可直接編輯上方提示詞，也可以上傳人物姿勢、人物長相、產品圖等參考圖，讓 AI 一起協助微調。
@@ -610,7 +862,7 @@ export default function PromoVisualsStep3() {
                             accept="image/*"
                             multiple
                             className="hidden"
-                            onChange={(event) => handleSceneReferenceUpload(scene.scene_number, event)}
+                            onChange={(event) => handleFrameReferenceUpload(scene.scene_number, 'start', event)}
                           />
                         </label>
                       </div>
@@ -629,7 +881,7 @@ export default function PromoVisualsStep3() {
                                 {image.name}
                               </div>
                               <button
-                                onClick={() => removeSceneReferenceImage(scene.scene_number, image.id)}
+                                onClick={() => removeFrameReferenceImage(scene.scene_number, 'start', image.id)}
                                 className="absolute right-1 top-1 rounded-full bg-black/65 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
                               >
                                 <X className="h-3 w-3" />
@@ -658,7 +910,10 @@ export default function PromoVisualsStep3() {
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') {
                             event.preventDefault();
-                            handlePromptAdjust(scene.scene_number, scene.nano_banana_pro_prompts);
+                            handlePromptAdjust(scene.scene_number, 'start', {
+                              prompt: scene.nano_banana_pro_prompts.start_frame,
+                              prompt_zh: scene.nano_banana_pro_prompts.start_frame_zh,
+                            });
                           }
                         }}
                         disabled={adjusting[scene.scene_number]}
@@ -666,7 +921,12 @@ export default function PromoVisualsStep3() {
                         className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-orange-500/50 disabled:opacity-50"
                       />
                       <button
-                        onClick={() => handlePromptAdjust(scene.scene_number, scene.nano_banana_pro_prompts)}
+                        onClick={() =>
+                          handlePromptAdjust(scene.scene_number, 'start', {
+                            prompt: scene.nano_banana_pro_prompts.start_frame,
+                            prompt_zh: scene.nano_banana_pro_prompts.start_frame_zh,
+                          })
+                        }
                         disabled={adjusting[scene.scene_number] || !adjustInputs[scene.scene_number]?.trim()}
                         className="flex min-w-40 items-center justify-center gap-2 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-200 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -690,6 +950,13 @@ export default function PromoVisualsStep3() {
           </div>
         </div>
       </div>
+      <MediaPreviewModal
+        open={Boolean(previewImage)}
+        onClose={() => setPreviewImage(null)}
+        src={previewImage?.src || null}
+        mediaType="image"
+        title={previewImage?.title}
+      />
     </div>
   );
 }
