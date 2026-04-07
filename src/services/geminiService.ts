@@ -4,15 +4,19 @@ import {
   STORY_CHAT_SYSTEM_PROMPT,
   buildCharacterPromptRequest,
   buildScenePromptRequest,
-  buildPromoScriptPrompt,
+  buildPromoScriptPhaseOnePrompt,
+  buildPromoStoryboardPhaseTwoPrompt,
+  buildPromoTechnicalPhaseThreePrompt,
   PROMO_SCRIPT_SYSTEM_PROMPT,
+  PROMO_SCRIPT_PHASE_TWO_SYSTEM_PROMPT,
+  PROMO_SCRIPT_PHASE_THREE_SYSTEM_PROMPT,
   PROMO_SCRIPT_ADJUST_SYSTEM_PROMPT,
   PROMO_PROMPT_ADJUST_SYSTEM_PROMPT,
 } from '../config/promptTemplates';
 
 const TEXT_MODEL = 'gemini-3-flash-preview';
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
-const VIDEO_MODEL = 'veo-3.1-fast-generate-preview';
+const VIDEO_MODEL = 'veo-3.1-lite-generate-preview';
 
 export interface GeminiReferenceFile {
   mimeType: string;
@@ -46,6 +50,7 @@ export interface PromoFramePromptResult {
 
 export interface PromoStoryboardScene {
   scene_number: number;
+  scene_location?: string;
   scene_outline?: string;
   duration_seconds?: number;
   default_shot_size?: string;
@@ -71,6 +76,48 @@ export interface PromoScriptData {
   total_duration_seconds?: number;
   script_dialogue: string;
   storyboard: PromoStoryboardScene[];
+}
+
+export type PromoScriptGenerationStage = 'phase1' | 'phase2' | 'phase3';
+
+interface PromoScriptPhaseOneData {
+  creative_rationale: string;
+  story_outline: string;
+  script_dialogue: string;
+}
+
+interface PromoStoryboardPlanningScene {
+  scene_number: number;
+  scene_location: string;
+  scene_outline: string;
+  duration_seconds: number;
+  default_shot_size: string;
+  camera_setup: string;
+  audio_design: string;
+  subtitle_voiceover: string;
+  transition_logic: string;
+}
+
+interface PromoStoryboardPlanningData {
+  storyboard: PromoStoryboardPlanningScene[];
+}
+
+interface PromoSceneTechnicalPromptData {
+  scene_number: number;
+  scene_location?: string;
+  continuity_summary: string;
+  negative_prompt: string;
+  nano_banana_pro_prompts: PromoScenePrompts;
+  continuity_prompt: {
+    en: string;
+    zh: string;
+  };
+  transition_prompt_en: string;
+  transition_prompt_zh: string;
+}
+
+interface PromoSceneTechnicalPromptPack {
+  storyboard: PromoSceneTechnicalPromptData[];
 }
 
 export interface SunoPrompt {
@@ -150,6 +197,8 @@ const estimateVideoCost = (promptTokens: number, videoCount = 1) => {
   return (promptTokens / 1_000_000) * PRICE_TABLE.textInputPer1M + videoCount * PRICE_TABLE.videoOutputPerVideo;
 };
 
+const shouldSkipCountTokensForModel = (model: string) => model.startsWith('veo-');
+
 export const getAi = () => {
   const apiKey = getApiKey();
   if (!apiKey) {
@@ -226,10 +275,120 @@ const promoFramePromptSchema = {
   required: ['prompt', 'prompt_zh'],
 } as const;
 
+const promoScriptPhaseOneSchema = {
+  type: Type.OBJECT,
+  properties: {
+    creative_rationale: { type: Type.STRING },
+    story_outline: { type: Type.STRING },
+    script_dialogue: {
+      type: Type.STRING,
+      description: '全片旁白或字幕腳本，每一句之間必須空一行',
+    },
+  },
+  required: ['creative_rationale', 'story_outline', 'script_dialogue'],
+} as const;
+
+const promoStoryboardPlanningSchema = {
+  type: Type.OBJECT,
+  properties: {
+    storyboard: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          scene_number: { type: Type.INTEGER },
+          scene_location: {
+            type: Type.STRING,
+            description: '場景設定。若與前一鏡同場景，請直接標註同場景：[場景名稱]',
+          },
+          scene_outline: { type: Type.STRING },
+          duration_seconds: { type: Type.INTEGER },
+          default_shot_size: {
+            type: Type.STRING,
+            description: '只能是 medium close-up、close-up、extreme close-up、macro shot 其中之一',
+          },
+          camera_setup: { type: Type.STRING },
+          audio_design: { type: Type.STRING },
+          subtitle_voiceover: {
+            type: Type.STRING,
+            description: '該分鏡對應的旁白或字幕，每句之間需空一行',
+          },
+          transition_logic: {
+            type: Type.STRING,
+            description: '與下一鏡的轉場邏輯；最後一鏡請填 Final shot, no transition needed.',
+          },
+        },
+        required: [
+          'scene_number',
+          'scene_location',
+          'scene_outline',
+          'duration_seconds',
+          'default_shot_size',
+          'camera_setup',
+          'audio_design',
+          'subtitle_voiceover',
+          'transition_logic',
+        ],
+      },
+    },
+  },
+  required: ['storyboard'],
+} as const;
+
+const promoTechnicalPromptPackSchema = {
+  type: Type.OBJECT,
+  properties: {
+    storyboard: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          scene_number: { type: Type.INTEGER },
+          scene_location: {
+            type: Type.STRING,
+            description: '沿用上一階段的場景設定；若為同場景請保留同場景標註',
+          },
+          continuity_summary: { type: Type.STRING },
+          negative_prompt: {
+            type: Type.STRING,
+            description: '英文負面提示詞，15-20 個單字內',
+          },
+          nano_banana_pro_prompts: promoPromptSchema,
+          continuity_prompt: {
+            type: Type.OBJECT,
+            properties: {
+              en: {
+                type: Type.STRING,
+                description: '英文 Veo Motion & Audio Prompt，50 個英文單字內',
+              },
+              zh: { type: Type.STRING },
+            },
+            required: ['en', 'zh'],
+          },
+          transition_prompt_en: { type: Type.STRING },
+          transition_prompt_zh: { type: Type.STRING },
+        },
+        required: [
+          'scene_number',
+          'scene_location',
+          'continuity_summary',
+          'negative_prompt',
+          'nano_banana_pro_prompts',
+          'continuity_prompt',
+          'transition_prompt_en',
+          'transition_prompt_zh',
+        ],
+      },
+    },
+  },
+  required: ['storyboard'],
+} as const;
+
 const buildPromoStoryboardSceneSchema = (aspectRatio: string) => ({
   type: Type.OBJECT,
   properties: {
     scene_number: { type: Type.INTEGER },
+    scene_location: { type: Type.STRING },
     scene_outline: { type: Type.STRING },
     duration_seconds: { type: Type.INTEGER },
     default_shot_size: {
@@ -277,11 +436,12 @@ const buildPromoStoryboardSceneSchema = (aspectRatio: string) => ({
       required: ['logic', 'prompt_en', 'prompt_zh'],
     },
   },
-  required: [
-    'scene_number',
-    'scene_outline',
-    'duration_seconds',
-    'default_shot_size',
+    required: [
+      'scene_number',
+      'scene_location',
+      'scene_outline',
+      'duration_seconds',
+      'default_shot_size',
     'camera_setup',
     'audio_design',
     'subtitle_voiceover',
@@ -309,6 +469,15 @@ const buildPromoScriptSchema = (aspectRatio: string) => ({
   },
   required: ['creative_rationale', 'story_outline', 'script_dialogue', 'storyboard'],
 });
+
+const parseRequestedDuration = (value: string) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
+const resolveSceneByNumberOrIndex = <T extends { scene_number: number }>(items: T[], sceneNumber: number, index: number) => {
+  return items.find(item => item.scene_number === sceneNumber) ?? items[index];
+};
 
 const extractDataUrl = (value: string) => {
   const matches = value.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -458,6 +627,7 @@ export const generatePromoScriptData = async ({
   includeCharacters,
   supplementaryText,
   referenceFiles = [],
+  onStageChange,
 }: {
   productName: string;
   productFeatures: string;
@@ -468,8 +638,10 @@ export const generatePromoScriptData = async ({
   includeCharacters: boolean;
   supplementaryText: string;
   referenceFiles?: GeminiReferenceFile[];
+  onStageChange?: (stage: PromoScriptGenerationStage) => void;
 }): Promise<PromoScriptData> => {
-  const prompt = buildPromoScriptPrompt({
+  onStageChange?.('phase1');
+  const phaseOnePrompt = buildPromoScriptPhaseOnePrompt({
     productName,
     productFeatures,
     productContents,
@@ -480,17 +652,112 @@ export const generatePromoScriptData = async ({
     supplementaryText,
   });
 
-  const response = await generateTextWithUsage({
-    contents: { parts: buildParts(prompt, referenceFiles) },
+  const phaseOneResponse = await generateTextWithUsage({
+    contents: { parts: buildParts(phaseOnePrompt, referenceFiles) },
     config: {
       systemInstruction: PROMO_SCRIPT_SYSTEM_PROMPT,
-      temperature: 0.7,
+      temperature: 0.85,
       responseMimeType: 'application/json',
-      responseSchema: buildPromoScriptSchema(aspectRatio),
+      responseSchema: promoScriptPhaseOneSchema,
     },
   });
 
-  return parseJsonResponse<PromoScriptData>(response.text || '{}', 'generatePromoScriptData');
+  const phaseOneData = parseJsonResponse<PromoScriptPhaseOneData>(
+    phaseOneResponse.text || '{}',
+    'generatePromoScriptData.phase1',
+  );
+
+  onStageChange?.('phase2');
+  const phaseTwoPrompt = buildPromoStoryboardPhaseTwoPrompt({
+    totalDurationSeconds,
+    aspectRatio,
+    includeCharacters,
+    supplementaryText,
+    phaseOneData,
+  });
+
+  const phaseTwoResponse = await generateTextWithUsage({
+    contents: phaseTwoPrompt,
+    config: {
+      systemInstruction: PROMO_SCRIPT_PHASE_TWO_SYSTEM_PROMPT,
+      temperature: 0.7,
+      responseMimeType: 'application/json',
+      responseSchema: promoStoryboardPlanningSchema,
+    },
+  });
+
+  const phaseTwoData = parseJsonResponse<PromoStoryboardPlanningData>(
+    phaseTwoResponse.text || '{}',
+    'generatePromoScriptData.phase2',
+  );
+
+  onStageChange?.('phase3');
+  const phaseThreePrompt = buildPromoTechnicalPhaseThreePrompt({
+    productName,
+    productFeatures,
+    productContents,
+    productOrigin,
+    aspectRatio,
+    includeCharacters,
+    supplementaryText,
+    phaseTwoStoryboard: JSON.stringify(phaseTwoData.storyboard, null, 2),
+  });
+
+  const phaseThreeResponse = await generateTextWithUsage({
+    contents: { parts: buildParts(phaseThreePrompt, referenceFiles) },
+    config: {
+      systemInstruction: PROMO_SCRIPT_PHASE_THREE_SYSTEM_PROMPT,
+      temperature: 0.45,
+      responseMimeType: 'application/json',
+      responseSchema: promoTechnicalPromptPackSchema,
+    },
+  });
+
+  const phaseThreeData = parseJsonResponse<PromoSceneTechnicalPromptPack>(
+    phaseThreeResponse.text || '{}',
+    'generatePromoScriptData.phase3',
+  );
+
+  const mergedStoryboard: PromoStoryboardScene[] = phaseTwoData.storyboard.map((scene, index) => {
+    const technicalPack = resolveSceneByNumberOrIndex(phaseThreeData.storyboard, scene.scene_number, index);
+
+    return {
+      scene_number: scene.scene_number,
+      scene_location: technicalPack?.scene_location ?? scene.scene_location,
+      scene_outline: scene.scene_outline,
+      duration_seconds: scene.duration_seconds,
+      default_shot_size: scene.default_shot_size,
+      camera_setup: scene.camera_setup,
+      audio_design: scene.audio_design,
+      subtitle_voiceover: scene.subtitle_voiceover,
+      nano_banana_pro_prompts: technicalPack?.nano_banana_pro_prompts ?? {
+        start_frame: '',
+        start_frame_zh: '',
+        end_frame: '',
+        end_frame_zh: '',
+      },
+      continuity_summary: technicalPack?.continuity_summary ?? '',
+      continuity_prompt: technicalPack?.continuity_prompt ?? {
+        en: '',
+        zh: '',
+      },
+      transition: {
+        logic: scene.transition_logic,
+        prompt_en: technicalPack?.transition_prompt_en ?? '',
+        prompt_zh: technicalPack?.transition_prompt_zh ?? '',
+      },
+    };
+  });
+
+  return {
+    creative_rationale: phaseOneData.creative_rationale,
+    story_outline: phaseOneData.story_outline,
+    total_duration_seconds:
+      parseRequestedDuration(totalDurationSeconds) ??
+      mergedStoryboard.reduce((sum, scene) => sum + (scene.duration_seconds || 0), 0),
+    script_dialogue: phaseOneData.script_dialogue,
+    storyboard: mergedStoryboard,
+  };
 };
 
 export const adjustPromoScriptData = async (currentScript: PromoScriptData, userInput: string) => {
@@ -787,18 +1054,22 @@ export const generatePromoVideo = async ({
   }
 
   let promptTokens = 0;
-  try {
-    promptTokens = await countTokens([
-      { text: prompt },
-      { inlineData: { mimeType: startFrame.mimeType, data: startFrame.data } },
-      { inlineData: { mimeType: endFrame.mimeType, data: endFrame.data } },
-    ], VIDEO_MODEL);
-  } catch (error) {
-    if (!isUnsupportedCountTokensError(error)) {
-      throw error;
+  if (!shouldSkipCountTokensForModel(VIDEO_MODEL)) {
+    try {
+      promptTokens = await countTokens([
+        { text: prompt },
+        { inlineData: { mimeType: startFrame.mimeType, data: startFrame.data } },
+        { inlineData: { mimeType: endFrame.mimeType, data: endFrame.data } },
+      ], VIDEO_MODEL);
+    } catch (error) {
+      if (!isUnsupportedCountTokensError(error)) {
+        throw error;
+      }
     }
+  }
 
-    // Veo preview models may support video generation without supporting countTokens.
+  if (promptTokens === 0) {
+    // Veo models may support video generation without supporting countTokens.
     // Fall back to counting the text prompt only so usage tracking doesn't block generation.
     try {
       promptTokens = await countTokens(prompt, TEXT_MODEL);

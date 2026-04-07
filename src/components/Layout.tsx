@@ -19,7 +19,8 @@ export default function Layout() {
     location.pathname === '/' ||
     location.pathname === '/admin' ||
     location.pathname === '/archive' ||
-    location.pathname === '/api-key';
+    location.pathname === '/api-key' ||
+    location.pathname === '/promo-story/step1';
 
   React.useEffect(() => {
     const interval = setInterval(() => {

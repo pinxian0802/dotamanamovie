@@ -19,6 +19,7 @@ import PromoScriptStep2 from './pages/promo/PromoScriptStep2';
 import PromoVisualsStep3 from './pages/promo/PromoVisualsStep3';
 import PromoVideoStep4 from './pages/promo/PromoVideoStep4';
 import PromoTransitionStep5 from './pages/promo/PromoTransitionStep5';
+import PromoStoryStep1 from './pages/promo-story/PromoStoryStep1';
 import AdminDashboard from './pages/common/AdminDashboard';
 import ProjectArchive from './pages/common/ProjectArchive';
 import ApiKeyPage from './pages/common/ApiKeyPage';
@@ -58,6 +59,10 @@ export default function App() {
           <Route path="step3a" element={<PromoVisualsStep3 />} />
           <Route path="step4a" element={<PromoVideoStep4 />} />
           <Route path="step5a" element={<PromoTransitionStep5 />} />
+          <Route path="promo-story/step1" element={<PromoStoryStep1 />} />
+          <Route path="promo-story/step2" element={<PromoVisualsStep3 />} />
+          <Route path="promo-story/step3" element={<PromoVideoStep4 />} />
+          <Route path="promo-story/step4" element={<PromoTransitionStep5 />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

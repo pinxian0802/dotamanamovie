@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../store/useProjectStore';
-import { adjustPromoScriptData, generatePromoScriptData } from '../../services/geminiService';
+import { adjustPromoScriptData, generatePromoScriptData, type PromoScriptGenerationStage } from '../../services/geminiService';
 import { Sparkles, ArrowRight, Loader2, Package, FileText, Paperclip, X, AlertTriangle, MessageSquareText } from 'lucide-react';
 import { DataMatrixLoader } from '../../components/DataMatrixLoader';
 import { clsx } from 'clsx';
@@ -19,9 +19,16 @@ export default function PromoScriptStep2() {
     removePromoScriptReferenceFile,
   } = useProjectStore();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState<PromoScriptGenerationStage | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'model'; text: string }[]>([]);
+
+  const generationStageText: Record<PromoScriptGenerationStage, string> = {
+    phase1: '階段一：AI 正在整理爆款企劃、Hook 與旁白文案...',
+    phase2: '階段二：AI 正在拆解視覺分鏡、景別與運鏡節奏...',
+    phase3: '階段三：AI 正在轉譯首尾幀與 Veo 動態提示詞...',
+  };
 
   const handleChatSend = async () => {
     if (!chatInput.trim() || !promoScriptData) return;
@@ -31,6 +38,7 @@ export default function PromoScriptStep2() {
     setChatHistory(newHistory);
     setChatInput('');
     setIsGenerating(true);
+    setGenerationStage(null);
 
     try {
       const data = await adjustPromoScriptData(promoScriptData, chatInput);
@@ -47,6 +55,7 @@ export default function PromoScriptStep2() {
       ]);
     } finally {
       setIsGenerating(false);
+      setGenerationStage(null);
     }
   };
 
@@ -92,6 +101,7 @@ export default function PromoScriptStep2() {
     if (!productName || !productFeatures) return;
 
     setIsGenerating(true);
+    setGenerationStage('phase1');
     setErrorMsg(null);
 
     try {
@@ -105,6 +115,7 @@ export default function PromoScriptStep2() {
         includeCharacters,
         supplementaryText,
         referenceFiles,
+        onStageChange: setGenerationStage,
       });
 
       setPromoScriptData(data);
@@ -122,6 +133,7 @@ export default function PromoScriptStep2() {
       }
     } finally {
       setIsGenerating(false);
+      setGenerationStage(null);
     }
   };
 
@@ -277,7 +289,7 @@ export default function PromoScriptStep2() {
             {isGenerating ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                生成中...
+                {generationStage ? '分段生成中...' : '生成中...'}
               </>
             ) : (
               <>
@@ -286,6 +298,12 @@ export default function PromoScriptStep2() {
               </>
             )}
           </button>
+
+          {generationStage && (
+            <div className="mt-3 text-xs text-orange-400/80 font-mono">
+              {generationStageText[generationStage]}
+            </div>
+          )}
 
           {errorMsg && (
             <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
@@ -309,7 +327,7 @@ export default function PromoScriptStep2() {
 
           {isGenerating && (
             <div className="h-64 flex flex-col items-center justify-center text-neutral-400 gap-4">
-              <DataMatrixLoader size="lg" text="AI 正在整理企劃思路、腳本與分鏡..." />
+              <DataMatrixLoader size="lg" text={generationStage ? generationStageText[generationStage] : 'AI 正在更新腳本與分鏡...'} />
             </div>
           )}
 
@@ -376,7 +394,14 @@ export default function PromoScriptStep2() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {scene.scene_location && (
+                      <div>
+                        <div className="text-sm text-neutral-400 mb-2">場景設定</div>
+                        <div className="text-neutral-200 leading-relaxed">{scene.scene_location}</div>
+                      </div>
+                    )}
+
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                       {scene.camera_setup && (
                         <div className="bg-black/30 p-4 rounded-xl border border-neutral-800/50">
                           <div className="text-sm text-neutral-400 mb-2">鏡頭設定</div>

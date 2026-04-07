@@ -10,17 +10,64 @@ export default function Lobby() {
   const resetProject = useProjectStore((state) => state.resetProject);
   const setWorkflowType = useProjectStore((state) => state.setWorkflowType);
   const addProjectToHistory = useProjectStore((state) => state.addProjectToHistory);
+  const setCurrentStep = useProjectStore((state) => state.setCurrentStep);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const handleStart = (type: 'gem' | 'promo') => {
+  const handleStart = (type: 'gem' | 'promo', route: string, step: number) => {
     setIsTransitioning(true);
     resetProject();
     setWorkflowType(type);
+    setCurrentStep(step);
     addProjectToHistory();
     setTimeout(() => {
-      navigate(type === 'gem' ? '/step1' : '/step2a');
+      navigate(route);
     }, 1500);
   };
+
+  const workflowCards = [
+    {
+      title: 'INITIATE GEM WORKFLOW',
+      subtitle: '啟動故事動畫生成流',
+      description: '從故事發想、角色設定、場景生成到動態影片與音畫整合，走完整的原創動畫工作流。',
+      icon: <Sparkles className="w-6 h-6 text-indigo-300" />,
+      badge: null,
+      route: '/step1',
+      workflowType: 'gem' as const,
+      step: 1,
+      cardClass:
+        'border-indigo-500/25 bg-indigo-500/10 shadow-[0_0_30px_rgba(79,70,229,0.28)] hover:shadow-[0_0_50px_rgba(79,70,229,0.45)]',
+      titleClass: 'text-indigo-100',
+      accentClass: 'text-indigo-300',
+    },
+    {
+      title: 'INITIATE PROMO WORKFLOW',
+      subtitle: '啟動產品廣告生成流',
+      description: '讓 AI 先做產品腳本、分鏡、首尾幀與動態提示詞，再一路進到影片與轉場製作。',
+      icon: <Play className="w-6 h-6 fill-orange-200 text-orange-300" />,
+      badge: null,
+      route: '/step2a',
+      workflowType: 'promo' as const,
+      step: 1,
+      cardClass:
+        'border-orange-500/25 bg-orange-500/10 shadow-[0_0_30px_rgba(249,115,22,0.28)] hover:shadow-[0_0_50px_rgba(249,115,22,0.45)]',
+      titleClass: 'text-orange-100',
+      accentClass: 'text-orange-300',
+    },
+    {
+      title: 'PROMO STORY',
+      subtitle: '商業故事短影音',
+      description: '自由撰寫故事腳本，AI 自動拆解分鏡並生成首尾幀提示詞，快速進入影片製作流程。',
+      icon: <span className="text-2xl leading-none">📖</span>,
+      badge: 'NEW',
+      route: '/promo-story/step1',
+      workflowType: 'promo' as const,
+      step: 1,
+      cardClass:
+        'border-emerald-500/25 bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.22)] hover:shadow-[0_0_50px_rgba(16,185,129,0.38)]',
+      titleClass: 'text-emerald-100',
+      accentClass: 'text-emerald-300',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-transparent flex items-center justify-center relative font-sans z-10">
@@ -110,30 +157,36 @@ export default function Lobby() {
           {LOBBY_COPY.description}
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-          <button
-            onClick={() => handleStart('gem')}
-            className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-full text-lg font-bold transition-all hover:scale-105 hover:bg-indigo-500 shadow-[0_0_30px_rgba(79,70,229,0.5)] hover:shadow-[0_0_50px_rgba(79,70,229,0.8)]"
-          >
-            <span>
-              {LOBBY_COPY.gemButton}
-              <br />
-              <span className="text-sm font-normal opacity-80">({LOBBY_COPY.gemCaption})</span>
-            </span>
-            <Play className="w-6 h-6 fill-white group-hover:translate-x-1 transition-transform" />
-          </button>
+        <div className="grid w-full max-w-6xl grid-cols-1 gap-6 lg:grid-cols-3">
+          {workflowCards.map((card) => (
+            <button
+              key={card.title}
+              onClick={() => handleStart(card.workflowType, card.route, card.step)}
+              className={`group relative flex min-h-[250px] flex-col justify-between overflow-hidden rounded-[28px] border p-6 text-left transition-all hover:-translate-y-1 ${card.cardClass}`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-black/20 p-3 backdrop-blur-sm">
+                  {card.icon}
+                </div>
+                {card.badge && (
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold tracking-[0.24em] text-white">
+                    {card.badge}
+                  </span>
+                )}
+              </div>
 
-          <button
-            onClick={() => handleStart('promo')}
-            className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-orange-500 text-white rounded-full text-lg font-bold transition-all hover:scale-105 hover:bg-orange-400 shadow-[0_0_30px_rgba(249,115,22,0.5)] hover:shadow-[0_0_50px_rgba(249,115,22,0.8)]"
-          >
-            <span>
-              {LOBBY_COPY.promoButton}
-              <br />
-              <span className="text-sm font-normal opacity-80">({LOBBY_COPY.promoCaption})</span>
-            </span>
-            <Play className="w-6 h-6 fill-white group-hover:translate-x-1 transition-transform" />
-          </button>
+              <div className="mt-8 space-y-3">
+                <div className={`text-2xl font-bold tracking-tight ${card.titleClass}`}>{card.title}</div>
+                <div className={`text-sm font-medium ${card.accentClass}`}>{card.subtitle}</div>
+                <p className="text-sm leading-relaxed text-neutral-300">{card.description}</p>
+              </div>
+
+              <div className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-white/90">
+                進入工作流
+                <Play className="h-4 w-4 fill-white/90 transition-transform group-hover:translate-x-1" />
+              </div>
+            </button>
+          ))}
         </div>
       </motion.div>
     </div>

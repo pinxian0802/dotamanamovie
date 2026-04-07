@@ -14,6 +14,47 @@ const storage = {
   },
 };
 
+const isBlobUrl = (value: unknown): value is string =>
+  typeof value === 'string' && value.startsWith('blob:');
+
+const stripBlobUrlsFromRecord = <T extends Record<string, string>>(record: T | undefined) => {
+  if (!record) return {} as T;
+
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => !isBlobUrl(value))
+  ) as T;
+};
+
+const stripBlobUrlValue = (value: string | null | undefined) => (isBlobUrl(value) ? null : (value ?? null));
+
+const sanitizeProjectStateSnapshot = (projectState: any = {}) => ({
+  ...projectState,
+  videoScenes: stripBlobUrlsFromRecord(projectState.videoScenes),
+  voiceScenes: stripBlobUrlsFromRecord(projectState.voiceScenes),
+  promoVideos: stripBlobUrlsFromRecord(projectState.promoVideos),
+  promoTransitions: stripBlobUrlsFromRecord(projectState.promoTransitions),
+  finalVideo: stripBlobUrlValue(projectState.finalVideo),
+});
+
+const sanitizePersistedState = (state: any) => {
+  if (!state || typeof state !== 'object') return state;
+
+  return {
+    ...state,
+    videoScenes: stripBlobUrlsFromRecord(state.videoScenes),
+    voiceScenes: stripBlobUrlsFromRecord(state.voiceScenes),
+    promoVideos: stripBlobUrlsFromRecord(state.promoVideos),
+    promoTransitions: stripBlobUrlsFromRecord(state.promoTransitions),
+    finalVideo: stripBlobUrlValue(state.finalVideo),
+    projectHistory: Array.isArray(state.projectHistory)
+      ? state.projectHistory.map((project: any) => ({
+          ...project,
+          state: sanitizeProjectStateSnapshot(project?.state),
+        }))
+      : [],
+  };
+};
+
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
@@ -34,6 +75,7 @@ export interface ScenePrompt {
 
 export interface PromoStoryboardScene {
   scene_number: number;
+  scene_location?: string;
   scene_outline?: string;
   duration_seconds?: number;
   default_shot_size?: string;
@@ -363,7 +405,8 @@ export const useProjectStore = create<ProjectState>()(
   projectHistory: [],
   addProjectToHistory: () => {
     const state = get();
-    const { projectHistory, currentProjectId, apiKey, setApiKey, clearApiKey, ...stateToSave } = state;
+    const { projectHistory, currentProjectId, apiKey, setApiKey, clearApiKey, ...rawStateToSave } = state;
+    const stateToSave = sanitizeProjectStateSnapshot(rawStateToSave);
     const newId = Date.now().toString();
     
     set((s) => ({ 
@@ -382,7 +425,8 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (!state.currentProjectId) return;
     
-    const { projectHistory, currentProjectId, apiKey, setApiKey, clearApiKey, ...stateToSave } = state;
+    const { projectHistory, currentProjectId, apiKey, setApiKey, clearApiKey, ...rawStateToSave } = state;
+    const stateToSave = sanitizeProjectStateSnapshot(rawStateToSave);
     
     const currentProject = state.projectHistory.find(p => p.id === currentProjectId);
     if (!currentProject) return;
@@ -413,7 +457,7 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     const project = state.projectHistory.find(p => p.id === id);
     if (project) {
-      const projectState = project.state || {};
+      const projectState = sanitizeProjectStateSnapshot(project.state || {});
       // Restore state but keep the cross-project history and usage analytics.
       set({ 
         ...projectState, 
@@ -504,4 +548,9 @@ export const useProjectStore = create<ProjectState>()(
 }), { 
   name: 'project-storage',
   storage: createJSONStorage(() => storage),
+  partialize: (state) => sanitizePersistedState(state),
+  merge: (persistedState, currentState) => ({
+    ...currentState,
+    ...sanitizePersistedState(persistedState),
+  }),
 }));
