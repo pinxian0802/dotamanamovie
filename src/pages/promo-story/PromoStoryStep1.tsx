@@ -329,6 +329,14 @@ ${trimmedScript}
         <aside className="hidden md:block w-[216px] shrink-0">
           <div className="sticky top-6 space-y-6">
             <div className="rounded-2xl border border-neutral-800/60 bg-neutral-950/85 p-5 backdrop-blur-xl">
+              <div className="mb-4">
+                <button
+                  onClick={() => navigate('/')}
+                  className="text-sm font-bold uppercase tracking-[0.22em] text-emerald-400 transition-colors hover:text-emerald-300"
+                >
+                  PROMO STORY
+                </button>
+              </div>
               <div className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-neutral-500">Workflow</div>
               <div className="space-y-3">
                 {[
