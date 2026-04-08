@@ -987,7 +987,12 @@ ${historyText}
   }));
 };
 
-export const generateImage = async (prompt: string, aspectRatio: string, referenceImage?: string) => {
+export const generateImages = async (
+  prompt: string,
+  aspectRatio: string,
+  referenceImage?: string,
+  imageCount = 1
+) => {
   const contents: any = { parts: [] as any[] };
 
   if (referenceImage) {
@@ -1012,23 +1017,35 @@ export const generateImage = async (prompt: string, aspectRatio: string, referen
     config: {
       imageConfig: {
         aspectRatio: aspectRatio as any,
+        numberOfImages: imageCount,
       },
     },
   });
 
+  const images: string[] = [];
   for (const part of response.candidates?.[0]?.content?.parts || []) {
     if (part.inlineData) {
-      recordUsage(IMAGE_MODEL, {
-        calls: 1,
-        promptTokens,
-        outputTokens: 1290,
-        estimatedCostUsd: estimateImageCost(promptTokens, 1),
-      });
-      return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      images.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
     }
   }
 
-  throw new Error('No image generated');
+  if (!images.length) {
+    throw new Error('No image generated');
+  }
+
+  recordUsage(IMAGE_MODEL, {
+    calls: 1,
+    promptTokens,
+    outputTokens: 1290 * images.length,
+    estimatedCostUsd: estimateImageCost(promptTokens, images.length),
+  });
+
+  return images;
+};
+
+export const generateImage = async (prompt: string, aspectRatio: string, referenceImage?: string) => {
+  const images = await generateImages(prompt, aspectRatio, referenceImage, 1);
+  return images[0];
 };
 
 export const generatePromoVideo = async ({

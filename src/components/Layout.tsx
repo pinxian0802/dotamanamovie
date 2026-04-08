@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/useProjectStore';
 import { clsx } from 'clsx';
 import { CheckCircle2, Circle, Menu, ChevronLeft } from 'lucide-react';
 import TechBackground from './TechBackground';
-import { APP_NAME, APP_FULL_NAME, GEM_STEPS, PROMO_STEPS } from '../config/workflowCopy';
+import { APP_NAME, APP_FULL_NAME, GEM_STEPS, PROMO_STEPS, PROMO_STORY_STEPS } from '../config/workflowCopy';
 
 export default function Layout() {
   const location = useLocation();
@@ -13,8 +13,44 @@ export default function Layout() {
   const currentStep = useProjectStore((state) => state.currentStep);
   const completedSteps = useProjectStore((state) => state.completedSteps);
   const workflowType = useProjectStore((state) => state.workflowType);
+  const workflowVariant = useProjectStore((state) => state.workflowVariant);
 
-  const currentSteps = workflowType === 'promo' ? PROMO_STEPS : GEM_STEPS;
+  const currentSteps = useMemo(() => {
+    if (workflowVariant === 'promo-story') return PROMO_STORY_STEPS;
+    if (workflowType === 'promo') return PROMO_STEPS;
+    return GEM_STEPS;
+  }, [workflowType, workflowVariant]);
+
+  const workflowMeta = useMemo(() => {
+    if (workflowVariant === 'promo-story') {
+      return {
+        label: 'PROMO STORY',
+        accent: 'text-emerald-400',
+        activeClass:
+          'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]',
+        iconClass: 'text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]',
+      };
+    }
+
+    if (workflowType === 'promo') {
+      return {
+        label: 'PROMO 產品廣告流',
+        accent: 'text-orange-400',
+        activeClass:
+          'bg-orange-500/20 text-orange-300 border border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.2)]',
+        iconClass: 'text-orange-500 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]',
+      };
+    }
+
+    return {
+      label: 'GEM 故事動畫流',
+      accent: 'text-indigo-400',
+      activeClass:
+        'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]',
+      iconClass: 'text-indigo-500 drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]',
+    };
+  }, [workflowType, workflowVariant]);
+
   const isSpecialPage =
     location.pathname === '/' ||
     location.pathname === '/admin' ||
@@ -47,7 +83,7 @@ export default function Layout() {
       <div
         className={clsx(
           'bg-neutral-950/80 backdrop-blur-xl border-r border-neutral-800/50 flex flex-col z-10 transition-all duration-300',
-          isSidebarOpen ? 'w-80' : 'w-20',
+          isSidebarOpen ? 'w-80' : 'w-20'
         )}
       >
         <div className="p-6 border-b border-neutral-800/50 flex flex-col gap-4">
@@ -56,9 +92,7 @@ export default function Layout() {
               <div className="cursor-pointer" onClick={() => navigate('/')}>
                 <h1 className="text-xl font-bold text-white tracking-tight">{APP_NAME}</h1>
                 <p className="text-xs text-neutral-500 mt-1">{APP_FULL_NAME}</p>
-                <p className="text-sm font-medium text-indigo-400 mt-1">
-                  {workflowType === 'promo' ? 'PROMO 產品廣告流' : 'GEM 故事動畫流'}
-                </p>
+                <p className={clsx('text-sm font-medium mt-1', workflowMeta.accent)}>{workflowMeta.label}</p>
               </div>
             ) : (
               <div className="cursor-pointer" onClick={() => navigate('/')}>
@@ -82,16 +116,16 @@ export default function Layout() {
                 key={step.id}
                 className={clsx(
                   'flex items-center gap-3 p-3 rounded-xl transition-all duration-200 cursor-pointer hover:bg-neutral-800/50',
-                  isActive && 'bg-orange-500/20 text-orange-300 border border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.2)] animate-pulse',
+                  isActive && workflowMeta.activeClass,
                   isCompleted && 'text-neutral-300',
-                  isFuture && 'text-neutral-500',
+                  isFuture && 'text-neutral-500'
                 )}
                 onClick={() => navigate(step.path)}
               >
                 {isCompleted ? (
-                  <CheckCircle2 className="w-5 h-5 text-orange-500 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                  <CheckCircle2 className={clsx('w-5 h-5', workflowMeta.iconClass)} />
                 ) : isActive ? (
-                  <Circle className="w-5 h-5 fill-orange-500 text-orange-500 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                  <Circle className={clsx('w-5 h-5 fill-current', workflowMeta.iconClass)} />
                 ) : (
                   <Circle className="w-5 h-5" />
                 )}

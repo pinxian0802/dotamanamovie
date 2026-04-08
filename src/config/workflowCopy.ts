@@ -14,9 +14,17 @@ export const GEM_STEPS = [
 
 export const PROMO_STEPS = [
   { id: 1, path: '/step2a', label: '產品解構與腳本' },
-  { id: 2, path: '/step3a', label: '視覺注入與首尾生成' },
+  { id: 2, path: '/step3a', label: '視覺首尾影格生成' },
   { id: 3, path: '/step4a', label: '動態插幀' },
   { id: 4, path: '/step5a', label: '轉場縫合' },
+  { id: 5, path: '/step-music', label: '音畫整合' },
+] as const;
+
+export const PROMO_STORY_STEPS = [
+  { id: 1, path: '/promo-story/step1', label: '故事腳本與分鏡' },
+  { id: 2, path: '/promo-story/step2', label: '角色設計' },
+  { id: 3, path: '/promo-story/step3', label: '分鏡影格生成' },
+  { id: 4, path: '/promo-story/step4', label: '影片生成' },
   { id: 5, path: '/step-music', label: '音畫整合' },
 ] as const;
 
@@ -24,36 +32,36 @@ export const LOBBY_COPY = {
   title: APP_NAME,
   subtitle: APP_FULL_NAME,
   description:
-    '一套給內部短影音團隊使用的 AI 動靜態影音工作流。你可以走原創故事動畫流，也可以走商業產品廣告流，在每個高成本節點都保留人工確認與微調空間。',
+    '一套給內部團隊使用的 AI 影音工作流平台，從企劃、腳本、分鏡、圖片、影片、轉場到音樂，讓每個高成本節點都能保留人工確認與版本管理。',
   gemButton: 'INITIATE GEM WORKFLOW',
-  gemCaption: '啟動故事動畫生成流',
+  gemCaption: '原創故事動畫流程',
   promoButton: 'INITIATE PROMO WORKFLOW',
-  promoCaption: '啟動產品廣告生成流',
+  promoCaption: '產品廣告短影音流程',
 } as const;
 
 export const ADMIN_COPY = {
   title: 'API 用量監控儀表板',
-  subtitle: '跨頁面與跨專案持久化記錄，並支援日期區間查詢。',
-  calls: '查詢區間 API 呼叫次數',
-  cost: '查詢區間預估成本',
+  subtitle: '查看所有模型呼叫次數、Token 用量與預估成本。',
+  calls: '總 API 呼叫次數',
+  cost: '總預估成本',
   promptTokens: 'Prompt Tokens',
   outputTokens: 'Output Tokens',
-  breakdown: '模型用量拆解',
-  empty: '所選日期區間內尚無用量紀錄。',
+  breakdown: '模型使用拆解',
+  empty: '目前還沒有任何 API 使用紀錄。',
 } as const;
 
 export const API_KEY_COPY = {
   badge: 'Runtime API Key',
   title: 'API Key 設定',
   description:
-    '在這裡輸入或替換 Gemini API Key。此設定頁只負責管理金鑰，不會阻擋你進入網站其他頁面。',
+    '在這裡輸入 Gemini API Key。金鑰只會儲存在目前瀏覽器的本地持久化儲存，不需要修改 .env。',
   inputLabel: 'Gemini API Key',
-  placeholder: '貼上你的 API Key，例如 AIza...',
-  storageTitle: '儲存在目前瀏覽器',
+  placeholder: '請輸入 API Key，例如 AIza...',
+  storageTitle: '本地持久化儲存',
   storageDescription:
-    '這把金鑰會保存在本機瀏覽器的持久化儲存中，供網站執行時使用，不需要回頭修改 .env。',
-  back: '返回首頁',
+    '這把金鑰會保存在目前瀏覽器中，之後重新進站仍可使用。你也可以隨時清除並換成新的 Key。',
+  back: '返回大廳',
   save: '儲存 API Key',
-  clear: '清除已儲存 Key',
-  saved: '已儲存，之後會優先使用這把 Key。',
+  clear: '清除目前金鑰',
+  saved: '已儲存，目前瀏覽器會優先使用這把 API Key。',
 } as const;

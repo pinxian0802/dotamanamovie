@@ -1,11 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  FolderOpen,
+  Layers,
+  Loader2,
+  Play,
+  Plus,
+  RefreshCw,
+  Video,
+  X,
+} from 'lucide-react';
+import { clsx } from 'clsx';
 import { useProjectStore } from '../../store/useProjectStore';
 import { generatePromoVideo } from '../../services/geminiService';
-import { ArrowRight, ArrowLeft, Layers, RefreshCw, CheckCircle2, Loader2, Play, Plus, Video, Download, AlertCircle, X } from 'lucide-react';
-import { clsx } from 'clsx';
 import { downloadAsset } from '../../utils/download';
+import AssetHistoryModal from '../../components/AssetHistoryModal';
 import MediaPreviewModal from '../../components/MediaPreviewModal';
+
+const getHistoryKey = (transitionIndex: number) => `promo-transition-${transitionIndex}`;
 
 export default function PromoTransitionStep5() {
   const navigate = useNavigate();
@@ -19,20 +36,24 @@ export default function PromoTransitionStep5() {
     setPromoTransitionConfirmed,
     markStepCompleted,
     setCurrentStep,
+    assetHistory,
+    pushAssetHistory,
   } = useProjectStore();
-  
+
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewVideo, setPreviewVideo] = useState<{ src: string; title: string } | null>(null);
+  const [historyModal, setHistoryModal] = useState<{ open: boolean; key: string; title: string; transitionIndex: number } | null>(null);
 
   const generateTransition = async (transitionIndex: number, transitionPrompt: string) => {
-    setGenerating(prev => ({ ...prev, [transitionIndex]: true }));
-    
+    if (!promoScriptData) return;
+    setGenerating((prev) => ({ ...prev, [transitionIndex]: true }));
+    setErrorMsg(null);
+
     try {
-      // Use end frame of previous scene and start frame of next scene
-      const prevSceneNum = promoScriptData!.storyboard[transitionIndex].scene_number;
-      const nextSceneNum = promoScriptData!.storyboard[transitionIndex + 1].scene_number;
-      
+      const prevSceneNum = promoScriptData.storyboard[transitionIndex].scene_number;
+      const nextSceneNum = promoScriptData.storyboard[transitionIndex + 1].scene_number;
+
       const videoUrl = await generatePromoVideo({
         prompt: transitionPrompt,
         startFrameDataUrl: promoImages[prevSceneNum]?.end,
@@ -41,18 +62,23 @@ export default function PromoTransitionStep5() {
       });
 
       setPromoTransition(transitionIndex, videoUrl);
+      pushAssetHistory(getHistoryKey(transitionIndex), {
+        kind: 'video',
+        title: `Transition ${transitionIndex + 1}`,
+        value: videoUrl,
+      });
     } catch (error: any) {
       console.error(`Failed to generate transition ${transitionIndex}:`, error);
       const errorString = error?.message || JSON.stringify(error) || '';
       if (errorString.includes('429') || errorString.includes('RESOURCE_EXHAUSTED')) {
-        setErrorMsg('API 配額已用盡，請檢查您的計費方案或稍後再試。');
+        setErrorMsg('API 配額不足，請稍後再試或更換 API Key。');
       } else if (errorString.includes('503') || errorString.includes('UNAVAILABLE')) {
-        setErrorMsg('模型目前處於高負載狀態，請稍後再試。');
+        setErrorMsg('轉場服務暫時不可用，請稍後重試。');
       } else {
-        setErrorMsg(`生成轉場 ${transitionIndex + 1} 失敗，請稍後再試。`);
+        setErrorMsg(`轉場 ${transitionIndex + 1} 生成失敗，請稍後再試。`);
       }
     } finally {
-      setGenerating(prev => ({ ...prev, [transitionIndex]: false }));
+      setGenerating((prev) => ({ ...prev, [transitionIndex]: false }));
     }
   };
 
@@ -60,9 +86,25 @@ export default function PromoTransitionStep5() {
     setPromoTransitionConfirmed(transitionIndex, !promoTransitionConfirmed[transitionIndex]);
   };
 
+  const openHistory = (transitionIndex: number) => {
+    setHistoryModal({
+      open: true,
+      key: getHistoryKey(transitionIndex),
+      title: `Transition ${transitionIndex + 1} History`,
+      transitionIndex,
+    });
+  };
+
+  const handleRestoreHistory = (entry: { value: string }, value?: string) => {
+    if (!historyModal) return;
+    const restoredValue = value || entry.value;
+    if (!restoredValue) return;
+    setPromoTransition(historyModal.transitionIndex, restoredValue);
+  };
+
   const handleNext = () => {
     markStepCompleted(4);
-    setCurrentStep(5); // Music Step
+    setCurrentStep(5);
     navigate('/step-music');
   };
 
@@ -71,228 +113,228 @@ export default function PromoTransitionStep5() {
   };
 
   if (!promoScriptData) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-neutral-400">
-        請先完成前面的步驟
-      </div>
-    );
+    return <div className="flex flex-1 items-center justify-center text-neutral-400">尚未找到 PROMO 腳本資料。</div>;
   }
 
-  // Calculate how many transitions we need (N scenes -> N-1 transitions)
   const numTransitions = promoScriptData.storyboard.length - 1;
-  
-  // If there's only 1 scene, no transitions needed
-  const allConfirmed = numTransitions === 0 || Array.from({ length: numTransitions }).every((_, i) => promoTransitionConfirmed[i]);
+  const allConfirmed =
+    numTransitions === 0 || Array.from({ length: numTransitions }).every((_, index) => promoTransitionConfirmed[index]);
 
   return (
-    <div className="flex flex-col h-full bg-transparent relative z-10 overflow-hidden">
-      <div className="flex items-center justify-between p-4 border-b border-neutral-800/50 bg-neutral-950/60 backdrop-blur-xl shrink-0">
-        <div className="flex items-center gap-4">
-          <button onClick={handleBack} className="p-2 hover:bg-neutral-800 rounded-full text-neutral-400 transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h2 className="text-xl font-semibold text-white tracking-wide">4. AI 轉場縫合生成</h2>
-            <p className="text-sm text-orange-400/80 font-mono">PROMO.STITCH // The Transition Stitcher</p>
+    <div className="relative z-10 flex h-full flex-col overflow-hidden bg-transparent">
+      <div className="shrink-0 border-b border-neutral-800/50 bg-neutral-950/60 p-4 backdrop-blur-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={handleBack} className="rounded-full p-2 text-neutral-400 transition-colors hover:bg-neutral-800">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h2 className="text-xl font-semibold tracking-wide text-white">4. 轉場縫合</h2>
+              <p className="text-sm font-mono text-orange-400/80">PROMO.STITCH // transition generation and review</p>
+            </div>
           </div>
+          <button
+            onClick={handleNext}
+            disabled={!allConfirmed}
+            className="flex items-center gap-2 rounded-lg bg-orange-600 px-6 py-2 font-medium text-white transition-colors hover:bg-orange-500 disabled:bg-neutral-800 disabled:text-neutral-500"
+          >
+            進入音樂整合
+            <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
-        <button
-          onClick={handleNext}
-          disabled={!allConfirmed}
-          className="flex items-center gap-2 px-6 py-2 bg-orange-600 hover:bg-orange-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-lg font-medium transition-colors"
-        >
-          完成縫合並前往配音
-          <ArrowRight className="w-4 h-4" />
-        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
-        
+      <div className="flex-1 space-y-8 overflow-y-auto p-6">
         {errorMsg && (
-          <div className="bg-red-900/30 border border-red-500/50 text-red-200 px-4 py-3 rounded-xl flex items-center justify-between w-full max-w-4xl mx-auto">
+          <div className="mx-auto flex w-full max-w-4xl items-center justify-between rounded-xl border border-red-500/50 bg-red-900/30 px-4 py-3 text-red-200">
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-red-400" />
+              <AlertCircle className="h-5 w-5 text-red-400" />
               <p>{errorMsg}</p>
             </div>
-            <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-300">
-              <X className="w-4 h-4" />
+            <button onClick={() => setErrorMsg(null)} className="text-red-400 transition-colors hover:text-red-300">
+              <X className="h-4 w-4" />
             </button>
           </div>
         )}
 
-        <div className="flex items-center gap-2 text-orange-400 mb-4 w-full max-w-4xl mx-auto">
-          <Layers className="w-5 h-5" />
-          <h3 className="font-semibold">片段時間軸</h3>
+        <div className="mx-auto mb-4 flex w-full max-w-4xl items-center gap-2 text-orange-400">
+          <Layers className="h-5 w-5" />
+          <h3 className="font-semibold">場景之間的轉場</h3>
         </div>
 
         {numTransitions === 0 ? (
-          <div className="bg-neutral-900/30 border border-neutral-800 rounded-2xl p-8 text-center text-neutral-400">
-            只有一個分鏡，無需生成轉場。請直接點擊右上角前往下一步。
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-8 text-center text-neutral-400">
+            只有一個場景時不需要額外生成轉場，直接進入下一步即可。
           </div>
         ) : (
           <div className="space-y-12">
             {Array.from({ length: numTransitions }).map((_, idx) => {
               const prevScene = promoScriptData.storyboard[idx];
               const nextScene = promoScriptData.storyboard[idx + 1];
-              const transitionPrompt = prevScene.nano_banana_pro_prompts.end_frame || 'smooth transition';
+              const transitionPrompt =
+                prevScene.transition?.prompt_en ||
+                prevScene.transition?.logic ||
+                prevScene.nano_banana_pro_prompts.end_frame ||
+                'smooth transition';
+              const transitionVideo = promoTransitions[idx];
+              const isGenerating = generating[idx];
+              const isConfirmed = promoTransitionConfirmed[idx];
+              const hasHistory = Boolean(assetHistory[getHistoryKey(idx)]?.length);
 
               return (
                 <div key={idx} className="relative flex flex-col items-center">
-                  {/* Timeline connecting line */}
-                  {idx > 0 && <div className="absolute -top-12 w-1 h-12 bg-neutral-800" />}
-                  
-                  <div className="w-full max-w-4xl bg-neutral-900/30 border border-neutral-800 rounded-2xl p-6 relative">
-                    <div className="flex items-center justify-between mb-6">
-                      <span className="bg-orange-500/20 text-orange-400 px-3 py-1 rounded-md text-sm font-mono font-bold border border-orange-500/30">
-                        轉場節點 {idx + 1}
+                  {idx > 0 && <div className="absolute -top-12 h-12 w-1 bg-neutral-800" />}
+
+                  <div className="relative w-full max-w-4xl rounded-2xl border border-neutral-800 bg-neutral-900/30 p-6">
+                    <div className="mb-6 flex items-center justify-between">
+                      <span className="rounded-md border border-orange-500/30 bg-orange-500/20 px-3 py-1 text-sm font-bold text-orange-400">
+                        轉場 {idx + 1}
                       </span>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => downloadAsset(promoTransitions[idx], `transition_${idx + 1}.mp4`)}
-                          disabled={!promoTransitions[idx]}
-                          className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 rounded-md text-neutral-300 transition-colors flex items-center gap-2 text-sm"
-                          title="下載轉場影片"
+                          onClick={() => downloadAsset(transitionVideo, `transition_${idx + 1}.mp4`)}
+                          disabled={!transitionVideo}
+                          className="flex items-center gap-2 rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:bg-neutral-700 disabled:opacity-50"
+                          title="下載轉場"
                         >
-                          <Download className="w-4 h-4" />
+                          <Download className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => openHistory(idx)}
+                          disabled={!hasHistory}
+                          className="flex items-center gap-2 rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:bg-neutral-700 disabled:opacity-50"
+                          title="開啟歷史版本"
+                        >
+                          <FolderOpen className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => generateTransition(idx, transitionPrompt)}
-                          disabled={generating[idx] || promoTransitionConfirmed[idx]}
-                          className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 rounded-md text-neutral-300 transition-colors flex items-center gap-2 text-sm"
+                          disabled={isGenerating || isConfirmed}
+                          className="flex items-center gap-2 rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:bg-neutral-700 disabled:opacity-50"
                         >
-                          <RefreshCw className={clsx("w-4 h-4", generating[idx] && "animate-spin")} />
-                          {generating[idx] ? '生成中...' : '生成轉場'}
+                          <RefreshCw className={clsx('h-4 w-4', isGenerating && 'animate-spin')} />
+                          {isGenerating ? '生成中...' : '重新生成'}
                         </button>
                         <button
                           onClick={() => toggleConfirm(idx)}
-                          disabled={!promoTransitions[idx]}
+                          disabled={!transitionVideo}
                           className={clsx(
-                            "px-3 py-1.5 rounded-md transition-colors flex items-center gap-2 text-sm font-medium",
-                            promoTransitionConfirmed[idx] 
-                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
-                              : "bg-neutral-800 hover:bg-neutral-700 text-neutral-400 disabled:opacity-50"
+                            'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                            isConfirmed
+                              ? 'border border-emerald-500/30 bg-emerald-500/20 text-emerald-400'
+                              : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 disabled:opacity-50',
                           )}
                         >
-                          <CheckCircle2 className="w-4 h-4" />
-                          確定
+                          <CheckCircle2 className="h-4 w-4" />
+                          確認
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex flex-col lg:flex-row gap-6 items-center justify-center">
-                      {/* Previous Scene Video */}
+                    <div className="flex flex-col items-center justify-center gap-6 lg:flex-row">
                       <div className="w-40 shrink-0 space-y-2">
-                        <div className="text-xs text-neutral-500 font-mono text-center">場景 {prevScene.scene_number}</div>
-                        <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
+                        <div className="text-center text-xs font-mono text-neutral-500">Scene {prevScene.scene_number}</div>
+                        <div className="overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950" style={{ aspectRatio: '9 / 16' }}>
                           {promoVideos[prevScene.scene_number] ? (
                             <button
                               onClick={() =>
                                 setPreviewVideo({
                                   src: promoVideos[prevScene.scene_number],
-                                  title: `分鏡 ${prevScene.scene_number} 影片`,
+                                  title: `Scene ${prevScene.scene_number} Video`,
                                 })
                               }
                               className="h-full w-full"
                             >
-                              <video src={promoVideos[prevScene.scene_number]} className="w-full h-full object-cover" muted loop />
+                              <video src={promoVideos[prevScene.scene_number]} className="h-full w-full object-cover" muted loop />
                             </button>
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-neutral-600">
-                              <Video className="w-8 h-8 opacity-50" />
+                            <div className="flex h-full w-full items-center justify-center text-neutral-600">
+                              <Video className="h-8 w-8 opacity-50" />
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Transition Node */}
-                      <div className="flex-1 w-full max-w-sm space-y-4 flex flex-col items-center">
+                      <div className="flex w-full max-w-sm flex-1 flex-col items-center space-y-4">
                         <div className="w-full space-y-2">
-                          <div className="text-xs text-neutral-500 font-mono text-center">轉場提示詞</div>
+                          <div className="text-center text-xs font-mono text-neutral-500">Transition Prompt</div>
                           <textarea
-                            defaultValue={transitionPrompt}
-                            className="w-full bg-orange-950/30 border border-orange-900/50 rounded-lg px-3 py-2 text-orange-200 text-sm focus:outline-none focus:border-orange-500/50 h-20 resize-none text-center"
+                            value={transitionPrompt}
                             readOnly
+                            className="h-24 w-full resize-none rounded-lg border border-orange-900/50 bg-orange-950/30 px-3 py-2 text-center text-sm text-orange-200 outline-none"
                           />
                         </div>
 
-                        <div className="w-40 bg-neutral-950 rounded-xl border-2 border-dashed border-orange-500/50 overflow-hidden relative flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.1)]" style={{ aspectRatio: '9 / 16' }}>
-                          {promoTransitions[idx] ? (
+                        <div
+                          className="relative flex w-40 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-orange-500/50 bg-neutral-950 shadow-[0_0_20px_rgba(249,115,22,0.1)]"
+                          style={{ aspectRatio: '9 / 16' }}
+                        >
+                          {transitionVideo ? (
                             <button
                               onClick={() =>
                                 setPreviewVideo({
-                                  src: promoTransitions[idx],
-                                  title: `轉場 ${idx + 1} 預覽`,
+                                  src: transitionVideo,
+                                  title: `Transition ${idx + 1}`,
                                 })
                               }
                               className="h-full w-full"
                             >
-                              <video 
-                                src={promoTransitions[idx]} 
-                                className="w-full h-full object-cover"
-                                controls
-                                autoPlay
-                                loop
-                                muted
-                                crossOrigin="anonymous"
-                              />
+                              <video src={transitionVideo} className="h-full w-full object-cover" controls autoPlay loop muted crossOrigin="anonymous" />
                             </button>
-                          ) : generating[idx] ? (
+                          ) : isGenerating ? (
                             <div className="flex flex-col items-center gap-2 text-orange-500">
-                              <Loader2 className="w-8 h-8 animate-spin" />
-                              <span className="text-xs font-mono animate-pulse">縫合中...</span>
+                              <Loader2 className="h-8 w-8 animate-spin" />
+                              <span className="text-xs font-mono">生成中...</span>
                             </div>
                           ) : (
-                            <div className="text-orange-500/50 flex flex-col items-center gap-1">
-                              <Plus className="w-8 h-8" />
-                              <span className="text-xs font-mono">轉場</span>
+                            <div className="flex flex-col items-center gap-1 text-orange-500/50">
+                              <Plus className="h-8 w-8" />
+                              <span className="text-xs font-mono">Transition</span>
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Next Scene Video */}
                       <div className="w-40 shrink-0 space-y-2">
-                        <div className="text-xs text-neutral-500 font-mono text-center">場景 {nextScene.scene_number}</div>
-                        <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
+                        <div className="text-center text-xs font-mono text-neutral-500">Scene {nextScene.scene_number}</div>
+                        <div className="overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950" style={{ aspectRatio: '9 / 16' }}>
                           {promoVideos[nextScene.scene_number] ? (
                             <button
                               onClick={() =>
                                 setPreviewVideo({
                                   src: promoVideos[nextScene.scene_number],
-                                  title: `分鏡 ${nextScene.scene_number} 影片`,
+                                  title: `Scene ${nextScene.scene_number} Video`,
                                 })
                               }
                               className="h-full w-full"
                             >
-                              <video src={promoVideos[nextScene.scene_number]} className="w-full h-full object-cover" muted loop />
+                              <video src={promoVideos[nextScene.scene_number]} className="h-full w-full object-cover" muted loop />
                             </button>
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-neutral-600">
-                              <Video className="w-8 h-8 opacity-50" />
+                            <div className="flex h-full w-full items-center justify-center text-neutral-600">
+                              <Play className="h-8 w-8 opacity-50" />
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
                   </div>
-                  
-                  {/* Chat Interface for Transition */}
-                  <div className="mt-2 bg-neutral-950/50 border border-neutral-800 rounded-lg p-4 space-y-2 w-full max-w-4xl">
-                    <input
-                      type="text"
-                      placeholder={`針對轉場 ${idx + 1} 進行調整...`}
-                      className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50"
-                    />
-                  </div>
-                  
-                  {/* Timeline connecting line to next node */}
-                  {idx < numTransitions - 1 && <div className="absolute -bottom-12 w-1 h-12 bg-neutral-800" />}
+
+                  {idx < numTransitions - 1 && <div className="absolute -bottom-12 h-12 w-1 bg-neutral-800" />}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      <AssetHistoryModal
+        open={Boolean(historyModal?.open)}
+        title={historyModal?.title || 'Transition History'}
+        entries={historyModal ? assetHistory[historyModal.key] || [] : []}
+        onClose={() => setHistoryModal(null)}
+        onRestore={handleRestoreHistory}
+      />
       <MediaPreviewModal
         open={Boolean(previewVideo)}
         onClose={() => setPreviewVideo(null)}

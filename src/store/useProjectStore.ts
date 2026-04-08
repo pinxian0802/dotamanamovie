@@ -27,6 +27,40 @@ const stripBlobUrlsFromRecord = <T extends Record<string, string>>(record: T | u
 
 const stripBlobUrlValue = (value: string | null | undefined) => (isBlobUrl(value) ? null : (value ?? null));
 
+const sanitizeAssetHistory = (history: any) => {
+  if (!history || typeof history !== 'object') return {};
+
+  return Object.fromEntries(
+    Object.entries(history).map(([key, entries]) => [
+      key,
+      Array.isArray(entries)
+        ? entries
+            .map((entry: any) => {
+              const variants = Array.isArray(entry?.variants)
+                ? entry.variants.filter((item: unknown) => typeof item === 'string' && !isBlobUrl(item))
+                : undefined;
+              const value =
+                entry?.kind === 'video'
+                  ? stripBlobUrlValue(entry?.value)
+                  : typeof entry?.value === 'string'
+                    ? entry.value
+                    : '';
+
+              return {
+                ...entry,
+                value,
+                variants,
+              };
+            })
+            .filter((entry: any) => {
+              if (entry.kind !== 'video') return true;
+              return typeof entry.value === 'string' && entry.value.length > 0;
+            })
+        : [],
+    ])
+  );
+};
+
 const sanitizeProjectStateSnapshot = (projectState: any = {}) => ({
   ...projectState,
   videoScenes: stripBlobUrlsFromRecord(projectState.videoScenes),
@@ -34,6 +68,7 @@ const sanitizeProjectStateSnapshot = (projectState: any = {}) => ({
   promoVideos: stripBlobUrlsFromRecord(projectState.promoVideos),
   promoTransitions: stripBlobUrlsFromRecord(projectState.promoTransitions),
   finalVideo: stripBlobUrlValue(projectState.finalVideo),
+  assetHistory: sanitizeAssetHistory(projectState.assetHistory),
 });
 
 const sanitizePersistedState = (state: any) => {
@@ -46,6 +81,7 @@ const sanitizePersistedState = (state: any) => {
     promoVideos: stripBlobUrlsFromRecord(state.promoVideos),
     promoTransitions: stripBlobUrlsFromRecord(state.promoTransitions),
     finalVideo: stripBlobUrlValue(state.finalVideo),
+    assetHistory: sanitizeAssetHistory(state.assetHistory),
     projectHistory: Array.isArray(state.projectHistory)
       ? state.projectHistory.map((project: any) => ({
           ...project,
@@ -136,6 +172,17 @@ export interface GeminiUsageEntry {
   estimatedCostUsd: number;
 }
 
+export type WorkflowVariant = 'gem' | 'promo' | 'promo-story';
+
+export interface AssetHistoryEntry {
+  id: string;
+  createdAt: string;
+  kind: 'text' | 'image' | 'video';
+  title: string;
+  value: string;
+  variants?: string[];
+}
+
 interface ProjectState {
   // Step 1
   storyChatHistory: ChatMessage[];
@@ -191,6 +238,8 @@ interface ProjectState {
   setPromoImageConfirmed: (key: string, confirmed: boolean) => void;
   promoImages: Record<string, { start: string; end: string }>; // scene_number -> {start, end} base64
   setPromoImage: (sceneNumber: number, type: 'start' | 'end', image: string) => void;
+  promoImageOptions: Record<string, { start: string[]; end: string[] }>;
+  setPromoImageOptions: (sceneNumber: number, type: 'start' | 'end', images: string[]) => void;
   promoVideoConfirmed: Record<string, boolean>;
   setPromoVideoConfirmed: (sceneNumber: number, confirmed: boolean) => void;
   promoVideos: Record<string, string>; // scene_number -> video url
@@ -205,6 +254,8 @@ interface ProjectState {
   setCurrentProjectId: (id: string | null) => void;
   workflowType: 'gem' | 'promo' | null;
   setWorkflowType: (type: 'gem' | 'promo' | null) => void;
+  workflowVariant: WorkflowVariant | null;
+  setWorkflowVariant: (variant: WorkflowVariant | null) => void;
   currentStep: number;
   setCurrentStep: (step: number) => void;
   completedSteps: number[];
@@ -222,6 +273,8 @@ interface ProjectState {
   projectHistory: any[];
   addProjectToHistory: () => void;
   autoSaveProject: () => void;
+  assetHistory: Record<string, AssetHistoryEntry[]>;
+  pushAssetHistory: (key: string, entry: Omit<AssetHistoryEntry, 'id' | 'createdAt'>) => void;
   pinProject: (id: string) => void;
   deleteProject: (id: string) => void;
   renameProject: (id: string, newName: string) => void;
@@ -355,6 +408,17 @@ export const useProjectStore = create<ProjectState>()(
         } 
       } 
     })),
+  promoImageOptions: {},
+  setPromoImageOptions: (sceneNumber, type, images) =>
+    set((state) => ({
+      promoImageOptions: {
+        ...state.promoImageOptions,
+        [sceneNumber]: {
+          ...(state.promoImageOptions[sceneNumber] || { start: [], end: [] }),
+          [type]: images,
+        },
+      },
+    })),
   promoVideoConfirmed: {},
   setPromoVideoConfirmed: (sceneNumber, confirmed) =>
     set((state) => ({
@@ -384,6 +448,9 @@ export const useProjectStore = create<ProjectState>()(
   workflowType: null,
   setWorkflowType: (type) => set({ workflowType: type }),
 
+  workflowVariant: null,
+  setWorkflowVariant: (variant) => set({ workflowVariant: variant }),
+
   currentStep: 0,
   setCurrentStep: (step) => set({ currentStep: step }),
   completedSteps: [],
@@ -405,6 +472,10 @@ export const useProjectStore = create<ProjectState>()(
   projectHistory: [],
   addProjectToHistory: () => {
     const state = get();
+    if (state.currentProjectId) {
+      state.autoSaveProject();
+      return;
+    }
     const { projectHistory, currentProjectId, apiKey, setApiKey, clearApiKey, ...rawStateToSave } = state;
     const stateToSave = sanitizeProjectStateSnapshot(rawStateToSave);
     const newId = Date.now().toString();
@@ -450,6 +521,21 @@ export const useProjectStore = create<ProjectState>()(
       )
     }));
   },
+  assetHistory: {},
+  pushAssetHistory: (key, entry) =>
+    set((state) => ({
+      assetHistory: {
+        ...state.assetHistory,
+        [key]: [
+          {
+            ...entry,
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            createdAt: new Date().toISOString(),
+          },
+          ...(state.assetHistory[key] || []),
+        ],
+      },
+    })),
   pinProject: (id) => set((state) => ({ projectHistory: state.projectHistory.map(p => p.id === id ? { ...p, pinned: !p.pinned } : p) })),
   deleteProject: (id) => set((state) => ({ projectHistory: state.projectHistory.filter(p => p.id !== id) })),
   renameProject: (id, newName) => set((state) => ({ projectHistory: state.projectHistory.map(p => p.id === id ? { ...p, name: newName } : p) })),
@@ -467,10 +553,15 @@ export const useProjectStore = create<ProjectState>()(
         geminiUsage: state.geminiUsage,
         usageHistory: state.usageHistory,
         apiKey: state.apiKey,
+        workflowVariant:
+          projectState.workflowVariant ||
+          (projectState.workflowType === 'gem' ? 'gem' : 'promo'),
         characterDesignConfirmed: projectState.characterDesignConfirmed || {},
         promoImageConfirmed: projectState.promoImageConfirmed || {},
+        promoImageOptions: projectState.promoImageOptions || {},
         promoVideoConfirmed: projectState.promoVideoConfirmed || {},
         promoTransitionConfirmed: projectState.promoTransitionConfirmed || {},
+        assetHistory: projectState.assetHistory || {},
       });
     }
   },
@@ -534,16 +625,19 @@ export const useProjectStore = create<ProjectState>()(
     promoScriptData: null,
     promoImageConfirmed: {},
     promoImages: {},
+    promoImageOptions: {},
     promoVideoConfirmed: {},
     promoVideos: {},
     promoTransitionConfirmed: {},
     promoTransitions: {},
     finalVideo: null,
     workflowType: null,
+    workflowVariant: null,
     currentStep: 1,
     completedSteps: [],
     name: '',
     description: '',
+    assetHistory: {},
   }),
 }), { 
   name: 'project-storage',

@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Download,
+  FolderOpen,
   Image as ImageIcon,
   Loader2,
   RefreshCw,
@@ -15,12 +16,13 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useProjectStore } from '../../store/useProjectStore';
+import AssetHistoryModal from '../../components/AssetHistoryModal';
 import MediaPreviewModal from '../../components/MediaPreviewModal';
 import {
   adjustPromoFramePromptWithReferences,
   GeminiReferenceFile,
   PromoFramePromptResult,
-  generateImage,
+  generateImages,
 } from '../../services/geminiService';
 import { downloadAsset } from '../../utils/download';
 
@@ -34,6 +36,7 @@ type SceneReferenceImage = GeminiReferenceFile & {
 };
 
 const getFrameAdjustKey = (sceneNumber: number, frameType: FrameType) => `${sceneNumber}-${frameType}`;
+const getHistoryKey = (sceneNumber: number, frameType: FrameType) => `promo-image-${sceneNumber}-${frameType}`;
 
 const getFramePromptFields = (frameType: FrameType): { prompt: PromptField; promptZh: PromptField } =>
   frameType === 'start'
@@ -74,12 +77,16 @@ export default function PromoVisualsStep3() {
   const {
     promoScriptData,
     promoImages,
+    promoImageOptions,
     promoImageConfirmed,
     setPromoImage,
+    setPromoImageOptions,
     setPromoImageConfirmed,
     markStepCompleted,
     setCurrentStep,
     updatePromoScenePrompts,
+    assetHistory,
+    pushAssetHistory,
   } = useProjectStore();
 
   const [baseImages, setBaseImages] = useState<string[]>([]);
@@ -89,6 +96,7 @@ export default function PromoVisualsStep3() {
   const [adjustInputs, setAdjustInputs] = useState<Record<string, string>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
+  const [historyModal, setHistoryModal] = useState<{ open: boolean; key: string; title: string; sceneNumber: number; frameType: FrameType } | null>(null);
   const baseImageInputRef = useRef<HTMLInputElement>(null);
 
   const handleBaseImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,7 +166,14 @@ export default function PromoVisualsStep3() {
 
     try {
       const uploadedImage = await readReferenceImage(file);
+      setPromoImageOptions(sceneNumber, type, [uploadedImage.previewUrl]);
       setPromoImage(sceneNumber, type, uploadedImage.previewUrl);
+      pushAssetHistory(getHistoryKey(sceneNumber, type), {
+        kind: 'image',
+        title: `Scene ${sceneNumber} ${type === 'start' ? 'Start' : 'End'} Frame`,
+        value: uploadedImage.previewUrl,
+        variants: [uploadedImage.previewUrl],
+      });
       setErrorMsg(null);
     } catch (error) {
       console.error(`Failed to upload ${type} frame for scene ${sceneNumber}:`, error);
@@ -177,8 +192,15 @@ export default function PromoVisualsStep3() {
       const referenceImage =
         type === 'end' && promoImages[sceneNumber]?.start ? promoImages[sceneNumber].start : baseImages[0];
 
-      const imageUrl = await generateImage(prompt, '9:16', referenceImage);
-      setPromoImage(sceneNumber, type, imageUrl);
+      const imageUrls = await generateImages(prompt, '9:16', referenceImage, 4);
+      setPromoImageOptions(sceneNumber, type, imageUrls);
+      setPromoImage(sceneNumber, type, imageUrls[0]);
+      pushAssetHistory(getHistoryKey(sceneNumber, type), {
+        kind: 'image',
+        title: `Scene ${sceneNumber} ${type === 'start' ? 'Start' : 'End'} Frame`,
+        value: imageUrls[0],
+        variants: imageUrls,
+      });
     } catch (error: any) {
       console.error(`Failed to generate ${type} image for scene ${sceneNumber}:`, error);
       const errorString = error?.message || JSON.stringify(error) || '';
@@ -198,6 +220,23 @@ export default function PromoVisualsStep3() {
   const toggleConfirm = (sceneNumber: number, type: 'start' | 'end') => {
     const key = `${sceneNumber}-${type}`;
     setPromoImageConfirmed(key, !promoImageConfirmed[key]);
+  };
+
+  const openHistory = (sceneNumber: number, frameType: FrameType) => {
+    setHistoryModal({
+      open: true,
+      key: getHistoryKey(sceneNumber, frameType),
+      title: `Scene ${sceneNumber} ${frameType === 'start' ? 'Start' : 'End'} Frame History`,
+      sceneNumber,
+      frameType,
+    });
+  };
+
+  const handleRestoreHistory = (_entry: any, value?: string) => {
+    if (!historyModal) return;
+    const restoredValue = value || _entry.value;
+    if (!restoredValue) return;
+    setPromoImage(historyModal.sceneNumber, historyModal.frameType, restoredValue);
   };
 
   const handlePromptAdjust = async (
@@ -345,6 +384,7 @@ export default function PromoVisualsStep3() {
               const startKey = `${scene.scene_number}-start`;
               const endKey = `${scene.scene_number}-end`;
               const generatedImages = promoImages[scene.scene_number];
+              const imageOptions = promoImageOptions[scene.scene_number] || { start: [], end: [] };
               const startReferences = frameReferenceImages[startKey] || [];
               const endReferences = frameReferenceImages[endKey] || [];
               const uploadedReferences = [...startReferences, ...endReferences];
@@ -420,6 +460,14 @@ export default function PromoVisualsStep3() {
                             <RefreshCw className={clsx('h-4 w-4', generating[startKey] && 'animate-spin')} />
                           </button>
                           <button
+                            onClick={() => openHistory(scene.scene_number, 'start')}
+                            disabled={!assetHistory[getHistoryKey(scene.scene_number, 'start')]?.length}
+                            className="rounded-md bg-neutral-800 p-1.5 text-neutral-300 transition-colors hover:bg-neutral-700 disabled:opacity-50"
+                            title="開啟歷史版本"
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                          </button>
+                          <button
                             onClick={() => toggleConfirm(scene.scene_number, 'start')}
                             disabled={!generatedImages?.start}
                             className={clsx(
@@ -468,6 +516,23 @@ export default function PromoVisualsStep3() {
                           </button>
                         )}
                       </div>
+
+                      {imageOptions.start.length > 0 && (
+                        <div className="grid max-w-xs grid-cols-4 gap-2">
+                          {imageOptions.start.map((image, index) => (
+                            <button
+                              key={`${scene.scene_number}-start-option-${index}`}
+                              onClick={() => setPromoImage(scene.scene_number, 'start', image)}
+                              className={clsx(
+                                'overflow-hidden rounded-lg border bg-neutral-950 transition',
+                                generatedImages?.start === image ? 'border-orange-500 shadow-[0_0_0_1px_rgba(249,115,22,0.7)]' : 'border-neutral-800'
+                              )}
+                            >
+                              <img src={image} alt={`Scene ${scene.scene_number} start option ${index + 1}`} className="h-20 w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       <div className="space-y-3 rounded-xl border border-neutral-800/60 bg-black/30 p-4">
                         <div>
@@ -646,6 +711,14 @@ export default function PromoVisualsStep3() {
                             <RefreshCw className={clsx('h-4 w-4', generating[endKey] && 'animate-spin')} />
                           </button>
                           <button
+                            onClick={() => openHistory(scene.scene_number, 'end')}
+                            disabled={!assetHistory[getHistoryKey(scene.scene_number, 'end')]?.length}
+                            className="rounded-md bg-neutral-800 p-1.5 text-neutral-300 transition-colors hover:bg-neutral-700 disabled:opacity-50"
+                            title="開啟歷史版本"
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                          </button>
+                          <button
                             onClick={() => toggleConfirm(scene.scene_number, 'end')}
                             disabled={!generatedImages?.end}
                             className={clsx(
@@ -703,6 +776,23 @@ export default function PromoVisualsStep3() {
                           </div>
                         )}
                       </div>
+
+                      {imageOptions.end.length > 0 && (
+                        <div className="grid max-w-xs grid-cols-4 gap-2">
+                          {imageOptions.end.map((image, index) => (
+                            <button
+                              key={`${scene.scene_number}-end-option-${index}`}
+                              onClick={() => setPromoImage(scene.scene_number, 'end', image)}
+                              className={clsx(
+                                'overflow-hidden rounded-lg border bg-neutral-950 transition',
+                                generatedImages?.end === image ? 'border-orange-500 shadow-[0_0_0_1px_rgba(249,115,22,0.7)]' : 'border-neutral-800'
+                              )}
+                            >
+                              <img src={image} alt={`Scene ${scene.scene_number} end option ${index + 1}`} className="h-20 w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       <div className="space-y-3 rounded-xl border border-neutral-800/60 bg-black/30 p-4">
                         <div>
@@ -950,6 +1040,13 @@ export default function PromoVisualsStep3() {
           </div>
         </div>
       </div>
+      <AssetHistoryModal
+        open={Boolean(historyModal?.open)}
+        title={historyModal?.title || '歷史版本'}
+        entries={historyModal ? assetHistory[historyModal.key] || [] : []}
+        onClose={() => setHistoryModal(null)}
+        onRestore={handleRestoreHistory}
+      />
       <MediaPreviewModal
         open={Boolean(previewImage)}
         onClose={() => setPreviewImage(null)}

@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../store/useProjectStore';
 import { adjustPromoScriptData, generatePromoScriptData, type PromoScriptGenerationStage } from '../../services/geminiService';
-import { Sparkles, ArrowRight, Loader2, Package, FileText, Paperclip, X, AlertTriangle, MessageSquareText } from 'lucide-react';
+import { Sparkles, ArrowRight, Loader2, Package, FileText, Paperclip, X, AlertTriangle, MessageSquareText, FolderOpen } from 'lucide-react';
 import { DataMatrixLoader } from '../../components/DataMatrixLoader';
 import { clsx } from 'clsx';
+import AssetHistoryModal from '../../components/AssetHistoryModal';
 
 export default function PromoScriptStep2() {
   const navigate = useNavigate();
@@ -17,12 +18,19 @@ export default function PromoScriptStep2() {
     setPromoScriptForm,
     addPromoScriptReferenceFiles,
     removePromoScriptReferenceFile,
+    currentProjectId,
+    addProjectToHistory,
+    assetHistory,
+    pushAssetHistory,
   } = useProjectStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStage, setGenerationStage] = useState<PromoScriptGenerationStage | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'model'; text: string }[]>([]);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+
+  const historyKey = 'promo-script-step1';
 
   const generationStageText: Record<PromoScriptGenerationStage, string> = {
     phase1: '階段一：AI 正在整理爆款企劃、Hook 與旁白文案...',
@@ -43,6 +51,11 @@ export default function PromoScriptStep2() {
     try {
       const data = await adjustPromoScriptData(promoScriptData, chatInput);
       setPromoScriptData(data);
+      pushAssetHistory(historyKey, {
+        kind: 'text',
+        title: 'PROMO Script Adjustment',
+        value: JSON.stringify(data, null, 2),
+      });
       setChatHistory([
         ...newHistory,
         { role: 'model', text: '已依照你的回饋更新腳本與分鏡。你可以繼續追問，或直接進入首尾幀生成。' },
@@ -119,6 +132,11 @@ export default function PromoScriptStep2() {
       });
 
       setPromoScriptData(data);
+      pushAssetHistory(historyKey, {
+        kind: 'text',
+        title: 'PROMO Script Draft',
+        value: JSON.stringify(data, null, 2),
+      });
     } catch (error: any) {
       console.error('Failed to generate script:', error);
       const errorString = error?.message || JSON.stringify(error) || '';
@@ -138,6 +156,9 @@ export default function PromoScriptStep2() {
   };
 
   const handleNext = () => {
+    if (!currentProjectId) {
+      addProjectToHistory();
+    }
     markStepCompleted(1);
     setCurrentStep(2);
     navigate('/step3a');
@@ -150,6 +171,14 @@ export default function PromoScriptStep2() {
           <h2 className="text-xl font-semibold text-white tracking-wide">1. 產品解構與腳本</h2>
           <p className="text-sm text-orange-400/80 font-mono">PROMO.INIT // 產品資料矩陣與腳本生成</p>
         </div>
+        <button
+          onClick={() => setHistoryModalOpen(true)}
+          disabled={!assetHistory[historyKey]?.length}
+          className="mr-2 inline-flex items-center gap-2 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg font-medium transition-colors"
+          title="開啟文字歷史"
+        >
+          <FolderOpen className="w-4 h-4" />
+        </button>
         <button
           onClick={handleNext}
           disabled={!promoScriptData}
@@ -514,6 +543,21 @@ export default function PromoScriptStep2() {
           )}
         </div>
       </div>
+      <AssetHistoryModal
+        open={historyModalOpen}
+        title="PROMO Script History"
+        entries={assetHistory[historyKey] || []}
+        onClose={() => setHistoryModalOpen(false)}
+        onRestore={(entry) => {
+          try {
+            const parsed = JSON.parse(entry.value);
+            setPromoScriptData(parsed);
+            setHistoryModalOpen(false);
+          } catch (error) {
+            console.error('Failed to restore promo script history:', error);
+          }
+        }}
+      />
     </div>
   );
 }

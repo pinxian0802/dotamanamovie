@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Eraser, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Eraser, FolderOpen, Loader2 } from 'lucide-react';
 import { useProjectStore, type PromoStoryboardScene } from '../../store/useProjectStore';
+import AssetHistoryModal from '../../components/AssetHistoryModal';
 
 const SYSTEM_PROMPT = `
 你現在是一位好萊塢級別的「影視分鏡導演與 AI 提示詞工程師」。
@@ -92,9 +93,12 @@ export default function PromoStoryStep1() {
     setCurrentStep,
     workflowType,
     setWorkflowType,
+    setWorkflowVariant,
     currentProjectId,
     addProjectToHistory,
     promoScriptData,
+    assetHistory,
+    pushAssetHistory,
   } = useProjectStore();
 
   const initialAspect = React.useMemo(() => {
@@ -122,6 +126,8 @@ export default function PromoStoryStep1() {
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [progress, setProgress] = React.useState(0);
   const [statusIndex, setStatusIndex] = React.useState(0);
+  const [historyModalOpen, setHistoryModalOpen] = React.useState(false);
+  const historyKey = 'promo-story-step1';
 
   React.useEffect(() => {
     setCurrentStep(1);
@@ -131,10 +137,8 @@ export default function PromoStoryStep1() {
     if (workflowType !== 'promo') {
       setWorkflowType('promo');
     }
-    if (!currentProjectId) {
-      addProjectToHistory();
-    }
-  }, [addProjectToHistory, currentProjectId, setWorkflowType, workflowType]);
+    setWorkflowVariant('promo-story');
+  }, [setWorkflowType, setWorkflowVariant, workflowType]);
 
   React.useEffect(() => {
     autoResize(textareaRef.current);
@@ -309,11 +313,26 @@ ${trimmedScript}
         story_outline: trimmedScript.slice(0, 300),
         script_dialogue: trimmedScript,
       } as any);
+      pushAssetHistory(historyKey, {
+        kind: 'text',
+        title: 'PROMO STORY Script Draft',
+        value: JSON.stringify(
+          {
+            workflow: 'promo-story',
+            storyboard: parsed,
+            aspectRatio,
+            totalDurationSeconds: duration,
+            rawScript: trimmedScript,
+            total_duration_seconds: duration,
+            story_outline: trimmedScript.slice(0, 300),
+            script_dialogue: trimmedScript,
+          },
+          null,
+          2,
+        ),
+      });
 
-      markStepCompleted(1);
-      setCurrentStep(2);
       setProgress(100);
-      navigate('/promo-story/step2');
     } catch (error) {
       console.error('Failed to generate promo story storyboard:', error);
       const message = error instanceof Error ? error.message : '故事腳本拆解失敗，請稍後再試。';
@@ -321,6 +340,16 @@ ${trimmedScript}
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleConfirmAndNext = () => {
+    if (!promoScriptData?.storyboard?.length) return;
+    if (!currentProjectId) {
+      addProjectToHistory();
+    }
+    markStepCompleted(1);
+    setCurrentStep(2);
+    navigate('/promo-story/step2');
   };
 
   return (
@@ -394,14 +423,24 @@ ${trimmedScript}
                 </p>
               </div>
 
-              <button
-                onClick={handleSubmit}
-                disabled={isGenerating}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
-              >
-                {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                儲存並下一步
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setHistoryModalOpen(true)}
+                  disabled={!assetHistory[historyKey]?.length}
+                  className="inline-flex items-center justify-center rounded-xl border border-neutral-800 bg-neutral-900/70 px-3 py-3 text-neutral-300 transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="生成歷史資料夾"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={isGenerating}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
+                >
+                  {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  儲存並下一步
+                </button>
+              </div>
             </div>
 
             <div className="px-8 py-6">
@@ -422,6 +461,17 @@ ${trimmedScript}
                 >
                   <Eraser className="h-4 w-4" />
                   清空
+                </button>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={handleConfirmAndNext}
+                  disabled={!promoScriptData?.storyboard?.length || isGenerating}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-900 disabled:text-neutral-500"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                  確認並前往下一步
                 </button>
               </div>
 
@@ -504,6 +554,22 @@ ${trimmedScript}
           </div>
         </main>
       </div>
+      <AssetHistoryModal
+        open={historyModalOpen}
+        title="PROMO STORY Script History"
+        entries={assetHistory[historyKey] || []}
+        onClose={() => setHistoryModalOpen(false)}
+        onRestore={(entry) => {
+          try {
+            const parsed = JSON.parse(entry.value);
+            setPromoScriptData(parsed);
+            setStoryData(parsed.rawScript || parsed.script_dialogue || '');
+            setHistoryModalOpen(false);
+          } catch (error) {
+            console.error('Failed to restore promo story history:', error);
+          }
+        }}
+      />
     </div>
   );
 }

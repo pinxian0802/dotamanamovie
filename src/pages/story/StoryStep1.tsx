@@ -1,16 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../store/useProjectStore';
-import { Send, Bot, User, Loader2, Save, Paperclip, Reply, CheckCircle2, X, ArrowRight } from 'lucide-react';
+import { Send, Bot, User, Loader2, Save, Paperclip, Reply, CheckCircle2, X, ArrowRight, FolderOpen } from 'lucide-react';
 import { clsx } from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateChatResponse } from '../../services/geminiService';
 import { STORY_CHAT_SYSTEM_PROMPT } from '../../config/promptTemplates';
+import AssetHistoryModal from '../../components/AssetHistoryModal';
 
 export default function StoryStep1() {
   const navigate = useNavigate();
-  const { storyChatHistory, setStoryChatHistory, setStoryData, setCurrentStep, markStepCompleted, name, setName, description, setDescription } = useProjectStore();
+  const {
+    storyChatHistory,
+    setStoryChatHistory,
+    setStoryData,
+    setCurrentStep,
+    markStepCompleted,
+    name,
+    setName,
+    description,
+    setDescription,
+    currentProjectId,
+    addProjectToHistory,
+    assetHistory,
+    pushAssetHistory,
+  } = useProjectStore();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState('Gemini');
@@ -19,7 +34,9 @@ export default function StoryStep1() {
   const [replyingTo, setReplyingTo] = useState<{ text: string, index: number } | null>(null);
   const [selectedFinalIndex, setSelectedFinalIndex] = useState<number | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const historyKey = 'gem-story-step1';
 
   useEffect(() => {
     setCurrentStep(1);
@@ -80,6 +97,11 @@ export default function StoryStep1() {
         model
       );
 
+      pushAssetHistory(historyKey, {
+        kind: 'text',
+        title: 'GEM Story Draft',
+        value: responseText,
+      });
       setStoryChatHistory([...newHistory, { role: 'model', text: responseText }]);
     } catch (error: any) {
       console.error(error);
@@ -101,6 +123,9 @@ export default function StoryStep1() {
     
     const finalData = storyChatHistory[selectedFinalIndex].text;
     setStoryData(finalData);
+    if (!currentProjectId) {
+      addProjectToHistory();
+    }
     markStepCompleted(1);
     setCurrentStep(2);
     navigate('/step2');
@@ -179,6 +204,14 @@ export default function StoryStep1() {
             <option value="Gemini">Gemini Story Planner</option>
             <option value="GPT">GPT-5 (Mock)</option>
           </select>
+          <button
+            onClick={() => setHistoryModalOpen(true)}
+            disabled={!assetHistory[historyKey]?.length}
+            className="flex items-center gap-2 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 rounded-lg font-medium transition-colors"
+            title="開啟文字歷史"
+          >
+            <FolderOpen className="w-4 h-4" />
+          </button>
           <button
             onClick={handleSaveAndNext}
             disabled={selectedFinalIndex === null}
@@ -411,6 +444,19 @@ export default function StoryStep1() {
           </div>
         </div>
       </div>
+      <AssetHistoryModal
+        open={historyModalOpen}
+        title="GEM Story History"
+        entries={assetHistory[historyKey] || []}
+        onClose={() => setHistoryModalOpen(false)}
+        onRestore={(entry) => {
+          const restoredHistory = [...storyChatHistory, { role: 'model' as const, text: entry.value }];
+          setStoryChatHistory(restoredHistory);
+          setSelectedFinalIndex(restoredHistory.length - 1);
+          setStoryData(entry.value);
+          setHistoryModalOpen(false);
+        }}
+      />
     </div>
   );
 }

@@ -1,73 +1,113 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProjectStore } from '../../store/useProjectStore';
-import { Sparkles, Play, BarChart3, Archive, KeyRound } from 'lucide-react';
+import { useProjectStore, type WorkflowVariant } from '../../store/useProjectStore';
+import { Sparkles, Play, BarChart3, Archive, KeyRound, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { APP_NAME, LOBBY_COPY } from '../../config/workflowCopy';
+
+type WorkflowCard = {
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: React.ReactNode;
+  badge: string | null;
+  route: string;
+  workflowType: 'gem' | 'promo';
+  workflowVariant: WorkflowVariant;
+  step: number;
+  cardClass: string;
+  titleClass: string;
+  accentClass: string;
+};
 
 export default function Lobby() {
   const navigate = useNavigate();
   const resetProject = useProjectStore((state) => state.resetProject);
   const setWorkflowType = useProjectStore((state) => state.setWorkflowType);
-  const addProjectToHistory = useProjectStore((state) => state.addProjectToHistory);
+  const setWorkflowVariant = useProjectStore((state) => state.setWorkflowVariant);
   const setCurrentStep = useProjectStore((state) => state.setCurrentStep);
+  const setName = useProjectStore((state) => state.setName);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isNamingOpen, setIsNamingOpen] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const [pendingCard, setPendingCard] = useState<WorkflowCard | null>(null);
 
-  const handleStart = (type: 'gem' | 'promo', route: string, step: number) => {
+  const workflowCards = useMemo<WorkflowCard[]>(
+    () => [
+      {
+        title: 'INITIATE GEM WORKFLOW',
+        subtitle: '原創故事動畫流程',
+        description: '從故事發想、角色、場景到合成與影片生成，適合需要完整敘事與角色世界觀的動畫流程。',
+        icon: <Sparkles className="w-6 h-6 text-indigo-300" />,
+        badge: null,
+        route: '/step1',
+        workflowType: 'gem',
+        workflowVariant: 'gem',
+        step: 1,
+        cardClass:
+          'border-indigo-500/25 bg-indigo-500/10 shadow-[0_0_30px_rgba(79,70,229,0.28)] hover:shadow-[0_0_50px_rgba(79,70,229,0.45)]',
+        titleClass: 'text-indigo-100',
+        accentClass: 'text-indigo-300',
+      },
+      {
+        title: 'INITIATE PROMO WORKFLOW',
+        subtitle: '產品廣告短影音流程',
+        description: '專注在腳本、首尾影格、動態插幀與轉場縫合，適合高停留率的產品廣告內容。',
+        icon: <Play className="w-6 h-6 fill-orange-200 text-orange-300" />,
+        badge: null,
+        route: '/step2a',
+        workflowType: 'promo',
+        workflowVariant: 'promo',
+        step: 1,
+        cardClass:
+          'border-orange-500/25 bg-orange-500/10 shadow-[0_0_30px_rgba(249,115,22,0.28)] hover:shadow-[0_0_50px_rgba(249,115,22,0.45)]',
+        titleClass: 'text-orange-100',
+        accentClass: 'text-orange-300',
+      },
+      {
+        title: 'PROMO STORY',
+        subtitle: '故事型產品短片流程',
+        description: '先整理故事腳本與分鏡，再往角色、影格與影片生成推進，適合需要敘事感的品牌短片。',
+        icon: <span className="text-2xl leading-none">PS</span>,
+        badge: 'NEW',
+        route: '/promo-story/step1',
+        workflowType: 'promo',
+        workflowVariant: 'promo-story',
+        step: 1,
+        cardClass:
+          'border-emerald-500/25 bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.22)] hover:shadow-[0_0_50px_rgba(16,185,129,0.38)]',
+        titleClass: 'text-emerald-100',
+        accentClass: 'text-emerald-300',
+      },
+    ],
+    []
+  );
+
+  const beginWorkflow = (card: WorkflowCard) => {
     setIsTransitioning(true);
     resetProject();
-    setWorkflowType(type);
-    setCurrentStep(step);
-    addProjectToHistory();
+    setName(projectName.trim());
+    setWorkflowType(card.workflowType);
+    setWorkflowVariant(card.workflowVariant);
+    setCurrentStep(card.step);
+    setIsNamingOpen(false);
     setTimeout(() => {
-      navigate(route);
+      navigate(card.route);
+      setIsTransitioning(false);
     }, 1500);
   };
 
-  const workflowCards = [
-    {
-      title: 'INITIATE GEM WORKFLOW',
-      subtitle: '啟動故事動畫生成流',
-      description: '從故事發想、角色設定、場景生成到動態影片與音畫整合，走完整的原創動畫工作流。',
-      icon: <Sparkles className="w-6 h-6 text-indigo-300" />,
-      badge: null,
-      route: '/step1',
-      workflowType: 'gem' as const,
-      step: 1,
-      cardClass:
-        'border-indigo-500/25 bg-indigo-500/10 shadow-[0_0_30px_rgba(79,70,229,0.28)] hover:shadow-[0_0_50px_rgba(79,70,229,0.45)]',
-      titleClass: 'text-indigo-100',
-      accentClass: 'text-indigo-300',
-    },
-    {
-      title: 'INITIATE PROMO WORKFLOW',
-      subtitle: '啟動產品廣告生成流',
-      description: '讓 AI 先做產品腳本、分鏡、首尾幀與動態提示詞，再一路進到影片與轉場製作。',
-      icon: <Play className="w-6 h-6 fill-orange-200 text-orange-300" />,
-      badge: null,
-      route: '/step2a',
-      workflowType: 'promo' as const,
-      step: 1,
-      cardClass:
-        'border-orange-500/25 bg-orange-500/10 shadow-[0_0_30px_rgba(249,115,22,0.28)] hover:shadow-[0_0_50px_rgba(249,115,22,0.45)]',
-      titleClass: 'text-orange-100',
-      accentClass: 'text-orange-300',
-    },
-    {
-      title: 'PROMO STORY',
-      subtitle: '商業故事短影音',
-      description: '自由撰寫故事腳本，AI 自動拆解分鏡並生成首尾幀提示詞，快速進入影片製作流程。',
-      icon: <span className="text-2xl leading-none">📖</span>,
-      badge: 'NEW',
-      route: '/promo-story/step1',
-      workflowType: 'promo' as const,
-      step: 1,
-      cardClass:
-        'border-emerald-500/25 bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.22)] hover:shadow-[0_0_50px_rgba(16,185,129,0.38)]',
-      titleClass: 'text-emerald-100',
-      accentClass: 'text-emerald-300',
-    },
-  ];
+  const handleCardClick = (card: WorkflowCard) => {
+    if (isTransitioning) return;
+    setPendingCard(card);
+    setProjectName('');
+    setIsNamingOpen(true);
+  };
+
+  const handleConfirmNaming = () => {
+    if (!pendingCard || !projectName.trim()) return;
+    beginWorkflow(pendingCard);
+  };
 
   return (
     <div className="min-h-screen bg-transparent flex items-center justify-center relative font-sans z-10">
@@ -135,6 +175,72 @@ export default function Lobby() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {isNamingOpen && pendingCard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              className="w-full max-w-md rounded-3xl border border-neutral-800 bg-neutral-950/95 p-6 shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className={`text-xs font-bold uppercase tracking-[0.24em] ${pendingCard.accentClass}`}>
+                    {pendingCard.title}
+                  </p>
+                  <h3 className="mt-2 text-2xl font-bold text-white">先命名這個專案</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+                    請先輸入專案名稱，確認後才會正式進入流程第一步。
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsNamingOpen(false)}
+                  className="rounded-full p-2 text-neutral-500 transition hover:bg-neutral-900 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-6">
+                <label className="mb-2 block text-sm font-medium text-neutral-300">專案名稱</label>
+                <input
+                  value={projectName}
+                  onChange={(event) => setProjectName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleConfirmNaming();
+                  }}
+                  autoFocus
+                  placeholder="例如：春季新品短片企劃"
+                  className="w-full rounded-2xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-white outline-none transition focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setIsNamingOpen(false)}
+                  className="rounded-full border border-neutral-800 px-4 py-2 text-sm font-medium text-neutral-300 transition hover:bg-neutral-900 hover:text-white"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmNaming}
+                  disabled={!projectName.trim()}
+                  className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  確認並進入
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -161,7 +267,7 @@ export default function Lobby() {
           {workflowCards.map((card) => (
             <button
               key={card.title}
-              onClick={() => handleStart(card.workflowType, card.route, card.step)}
+              onClick={() => handleCardClick(card)}
               className={`group relative flex min-h-[250px] flex-col justify-between overflow-hidden rounded-[28px] border p-6 text-left transition-all hover:-translate-y-1 ${card.cardClass}`}
             >
               <div className="flex items-start justify-between gap-4">
@@ -182,7 +288,7 @@ export default function Lobby() {
               </div>
 
               <div className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-white/90">
-                進入工作流
+                建立專案並進入
                 <Play className="h-4 w-4 fill-white/90 transition-transform group-hover:translate-x-1" />
               </div>
             </button>
